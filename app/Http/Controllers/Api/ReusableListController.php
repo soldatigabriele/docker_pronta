@@ -27,6 +27,7 @@ class ReusableListController extends Controller
             ->with(['items' => function ($query) {
                 $query->orderBy('sort_order')->orderBy('created_at');
             }, 'user:id,name,email'])
+            ->orderBy('is_pinned', 'desc')
             ->orderBy('sort_order')
             ->orderBy('created_at');
 
@@ -50,6 +51,7 @@ class ReusableListController extends Controller
             'color' => 'nullable|string|regex:/^#[0-9A-F]{6}$/i',
             'icon' => 'nullable|string|max:50',
             'is_public' => 'boolean',
+            'is_pinned' => 'boolean',
             'sort_order' => 'integer|min:0',
         ]);
 
@@ -111,6 +113,7 @@ class ReusableListController extends Controller
             'color' => 'nullable|string|regex:/^#[0-9A-F]{6}$/i',
             'icon' => 'nullable|string|max:50',
             'is_public' => 'boolean',
+            'is_pinned' => 'boolean',
             'sort_order' => 'integer|min:0',
         ]);
 
@@ -140,6 +143,36 @@ class ReusableListController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'List deleted successfully',
+        ]);
+    }
+
+    public function pin(Request $request, ReusableList $reusableList): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$reusableList->canUserAccess($user, 'edit')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to pin this list',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'is_pinned' => 'required|boolean',
+        ]);
+
+        $reusableList->update([
+            'is_pinned' => $validated['is_pinned']
+        ]);
+
+        $reusableList->load('user:id,name,email');
+
+        $message = $validated['is_pinned'] ? 'List pinned successfully' : 'List unpinned successfully';
+
+        return response()->json([
+            'success' => true,
+            'data' => $reusableList,
+            'message' => $message,
         ]);
     }
 

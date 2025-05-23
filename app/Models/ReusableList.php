@@ -13,6 +13,7 @@ class ReusableList extends Model
     protected $casts = [
         'is_shared' => 'boolean',
         'is_public' => 'boolean',
+        'is_pinned' => 'boolean',
         'sort_order' => 'integer',
     ];
 

@@ -76,7 +76,18 @@
                 <h3 class="list-name">{{ list.name }}</h3>
                 <p v-if="list.description" class="list-description">{{ list.description }}</p>
               </div>
-              <div v-if="list.is_shared" class="shared-indicator">👥</div>
+              <div class="list-actions">
+                <button 
+                  @click.stop="togglePin(list)" 
+                  :disabled="pinningList === list.id"
+                  class="pin-btn"
+                  :class="{ 'pinned': list.is_pinned }"
+                  :title="list.is_pinned ? 'Unpin list' : 'Pin list'"
+                >
+                  {{ list.is_pinned ? '📌' : '📍' }}
+                </button>
+                <div v-if="list.is_shared" class="shared-indicator">👥</div>
+              </div>
             </div>
             
             <div class="list-stats">
@@ -114,7 +125,18 @@
                 <h3 class="list-name">{{ list.name }}</h3>
                 <p class="shared-by">Shared by {{ list.user?.name || 'Unknown' }}</p>
               </div>
-              <div class="shared-indicator">👥</div>
+              <div class="list-actions">
+                <button 
+                  @click.stop="togglePin(list)" 
+                  :disabled="pinningList === list.id"
+                  class="pin-btn"
+                  :class="{ 'pinned': list.is_pinned }"
+                  :title="list.is_pinned ? 'Unpin list' : 'Pin list'"
+                >
+                  {{ list.is_pinned ? '📌' : '📍' }}
+                </button>
+                <div class="shared-indicator">👥</div>
+              </div>
             </div>
             
             <div class="list-stats">
@@ -234,7 +256,8 @@ export default {
         sort_order: 0
       },
       recentActivity: [], // Will be populated with recent completions/additions
-      error: null
+      error: null,
+      pinningList: null
     }
   },
   
@@ -242,13 +265,27 @@ export default {
     sortedLists() {
       return this.lists
         .filter(list => list.user_id === this.user?.id)
-        .sort((a, b) => a.sort_order - b.sort_order)
+        .sort((a, b) => {
+          // First sort by pinned status (pinned first)
+          if (a.is_pinned !== b.is_pinned) {
+            return b.is_pinned - a.is_pinned
+          }
+          // Then sort by sort_order
+          return a.sort_order - b.sort_order
+        })
     },
     
     sharedLists() {
       return this.lists
         .filter(list => list.user_id !== this.user?.id)
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => {
+          // First sort by pinned status (pinned first)
+          if (a.is_pinned !== b.is_pinned) {
+            return b.is_pinned - a.is_pinned
+          }
+          // Then sort by name
+          return a.name.localeCompare(b.name)
+        })
     },
     
     totalLists() {
@@ -441,7 +478,93 @@ export default {
           timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours ago
         }
       ].slice(0, 5) // Show max 5 recent activities
+    },
+    
+    async togglePin(list) {
+      if (this.pinningList === list.id) return
+      
+      this.pinningList = list.id
+      const newPinnedStatus = !list.is_pinned
+      
+      try {
+        await listService.pinList(list.id, newPinnedStatus)
+        
+        // Update the local list data
+        const listIndex = this.lists.findIndex(l => l.id === list.id)
+        if (listIndex !== -1) {
+          this.lists[listIndex].is_pinned = newPinnedStatus
+        }
+        
+      } catch (error) {
+        console.error('Failed to toggle pin status:', error)
+        this.error = error.message
+      } finally {
+        this.pinningList = null
+      }
     }
   }
 }
-</script> 
+</script>
+
+<style scoped>
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pin-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  opacity: 0.6;
+}
+
+.pin-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.pin-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+.pin-btn.pinned {
+  opacity: 1;
+  background-color: rgba(255, 215, 0, 0.2);
+}
+
+.shared-indicator {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.list-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.list-info {
+  flex: 1;
+}
+
+.list-name {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.list-description {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+  opacity: 0.8;
+}
+</style> 

@@ -63,6 +63,17 @@ class ListService {
     }
   }
 
+  async pinList(listId, isPinned) {
+    try {
+      const response = await axios.patch(`${this.baseURL}/lists/${listId}/pin`, {
+        is_pinned: isPinned
+      })
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to pin/unpin list')
+    }
+  }
+
   async getListItems(listId, completed = null) {
     try {
       const params = {}

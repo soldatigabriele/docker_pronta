@@ -40,6 +40,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // List reordering
     Route::post('lists/reorder', [ReusableListController::class, 'reorder']);
     
+    // List pinning
+    Route::patch('lists/{reusableList}/pin', [ReusableListController::class, 'pin']);
+    
     // List Items (nested under lists)
     Route::prefix('lists/{reusableList}')->group(function () {
         Route::apiResource('items', ListItemController::class, [
