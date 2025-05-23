@@ -317,6 +317,7 @@
 </template>
 
 <script>
+import Pusher from 'pusher-js'
 import authService from '../services/auth'
 import listService from '../services/list'
 
@@ -350,7 +351,9 @@ export default {
       },
       processingShare: null,
       sharingList: false,
-      pendingShares: []
+      pendingShares: [],
+      pusher: null,
+      userChannel: null
     }
   },
   
@@ -477,43 +480,86 @@ export default {
     },
     
     setupRealTimeUpdates() {
-      if (!window.Echo || !this.user) return
+      if (!this.user) {
+        console.log('⚠️ No user available for real-time updates')
+        return
+      }
       
-      console.log('🔌 Setting up real-time updates for user:', this.user.id)
+      console.log('🔌 Setting up Pusher real-time updates for user:', this.user.id)
       
-      // Listen for list updates on the user's private channel
-      const channel = window.Echo.private(`user.${this.user.id}`)
+      // Initialize Pusher
+      Pusher.logToConsole = true
       
-      console.log('📡 Subscribing to channel:', `user.${this.user.id}`)
+      this.pusher = new Pusher(import.meta.env.VITE_PUSHER_APP_KEY, {
+        cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+        authEndpoint: '/api/pusher/auth',
+        auth: {
+          headers: {
+            'Authorization': `Bearer ${authService.getToken()}`,
+            'Accept': 'application/json',
+          }
+        }
+      })
       
-      channel
-        .listen('list.updated', (e) => {
-          console.log('📝 List updated event received:', e)
-          this.handleListUpdate(e.list)
-        })
-        .listen('list.shared', (e) => {
-          console.log('👥 List shared event received:', e)
-          this.handleListShared(e.share)
-        })
-        .listen('list.item.updated', (e) => {
-          console.log('✏️ List item updated event received:', e)
-          this.handleListItemUpdate(e)
-        })
-        
-      // Debug channel subscription
-      channel.subscribed(() => {
+      console.log('📡 Subscribing to private channel:', `private-user.${this.user.id}`)
+      
+      // Subscribe to the user's private channel
+      this.userChannel = this.pusher.subscribe(`private-user.${this.user.id}`)
+      
+      // Handle subscription success
+      this.userChannel.bind('pusher:subscription_succeeded', () => {
         console.log('✅ Successfully subscribed to user channel')
       })
       
-      channel.error((error) => {
+      // Handle subscription error
+      this.userChannel.bind('pusher:subscription_error', (error) => {
         console.log('❌ Channel subscription error:', error)
+      })
+      
+      // Listen for list updates
+      this.userChannel.bind('list.updated', (data) => {
+        console.log('📝 List updated event received:', data)
+        this.handleListUpdate(data.list)
+      })
+      
+      // Listen for list shared events
+      this.userChannel.bind('list.shared', (data) => {
+        console.log('👥 List shared event received:', data)
+        this.handleListShared(data.share)
+      })
+      
+      // Listen for list item updates
+      this.userChannel.bind('list.item.updated', (data) => {
+        console.log('✏️ List item updated event received:', data)
+        this.handleListItemUpdate(data)
+      })
+      
+      // Handle connection state changes
+      this.pusher.connection.bind('state_change', (states) => {
+        console.log('🔄 Pusher connection state changed:', states.previous, '->', states.current)
+      })
+      
+      this.pusher.connection.bind('connected', () => {
+        console.log('🟢 Pusher connected')
+      })
+      
+      this.pusher.connection.bind('disconnected', () => {
+        console.log('🔴 Pusher disconnected')
       })
     },
     
     cleanupRealTimeUpdates() {
-      if (!window.Echo || !this.user) return
+      if (this.userChannel) {
+        console.log('🧹 Unsubscribing from user channel')
+        this.pusher.unsubscribe(`private-user.${this.user.id}`)
+        this.userChannel = null
+      }
       
-      window.Echo.leave(`user.${this.user.id}`)
+      if (this.pusher) {
+        console.log('🧹 Disconnecting Pusher')
+        this.pusher.disconnect()
+        this.pusher = null
+      }
     },
     
     handleListUpdate(updatedList) {
@@ -777,14 +823,24 @@ export default {
     },
     
     testWebSocket() {
-      console.log('🧪 Testing WebSocket connection...')
-      console.log('Echo instance:', window.Echo)
-      console.log('Connection state:', window.Echo?.connector?.pusher?.connection?.state)
+      console.log('🧪 Testing Pusher WebSocket connection...')
+      console.log('Pusher instance:', this.pusher)
       
-      if (window.Echo && this.user) {
-        // Test by trying to subscribe to a test channel
-        const testChannel = window.Echo.private(`user.${this.user.id}`)
-        console.log('Test channel created:', testChannel)
+      if (this.pusher) {
+        console.log('Connection state:', this.pusher.connection.state)
+        console.log('Socket ID:', this.pusher.connection.socket_id)
+        
+        if (this.userChannel) {
+          console.log('User channel:', this.userChannel)
+          console.log('Channel subscribed:', this.userChannel.subscribed)
+          
+          // Test by sending a test event (if your backend supports it)
+          console.log('Channel name:', this.userChannel.name)
+        } else {
+          console.log('⚠️ No user channel available')
+        }
+      } else {
+        console.log('❌ No Pusher instance available')
       }
     }
   }

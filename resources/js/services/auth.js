@@ -126,6 +126,10 @@ class AuthService {
   getUser() {
     return this.user
   }
+
+  getToken() {
+    return this.token
+  }
 }
 
 export default new AuthService() 
