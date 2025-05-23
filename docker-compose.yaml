@@ -9,21 +9,11 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - .:/var/www/html
-      - ./docker/sqlite/database.sqlite:/var/www/html/database/database.sqlite # SQLite database file
+      - ./docker/sqlite/database.sqlite:/var/www/html/database/database.sqlite
     environment:
       - APACHE_DOCUMENT_ROOT=/var/www/html/public
-    depends_on:
-      - composer
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  composer:
-    image: composer:latest
-    container_name: laravel_composer
-    volumes:
-      - .:/app
-    command: install
 
 volumes:
   sqlite:
