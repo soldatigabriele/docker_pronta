@@ -1,5 +1,5 @@
 <template>
-  <h1>Hello from Vue!</h1>
+  <h1>Loaded...</h1>
 </template>
 
 <script setup>
