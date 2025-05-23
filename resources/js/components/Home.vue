@@ -74,7 +74,6 @@
               <div class="list-icon">{{ getListIcon(list.icon) }}</div>
               <div class="list-info">
                 <h3 class="list-name">{{ list.name }}</h3>
-                <p v-if="list.description" class="list-description">{{ list.description }}</p>
               </div>
               <div class="list-actions">
                 <button 
@@ -91,14 +90,8 @@
             </div>
             
             <div class="list-stats">
-              <div v-if="list.item_counts.pending > 0" class="pending-count">
-                {{ list.item_counts.pending }} pending
-              </div>
-              <div v-if="list.item_counts.total > 0" class="total-count">
-                {{ list.item_counts.total }} total
-              </div>
-              <div v-if="list.item_counts.total === 0" class="empty-list">
-                Empty list
+              <div class="pending-count">
+                {{ list.item_counts.pending }}
               </div>
             </div>
           </div>
