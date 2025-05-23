@@ -331,7 +331,7 @@ export default {
       
       this.pusher = new Pusher(import.meta.env.VITE_PUSHER_APP_KEY, {
         cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
-        authEndpoint: '/api/pusher/auth',
+        authEndpoint: '/api/broadcasting/auth',
         auth: {
           headers: {
             'Authorization': `Bearer ${authService.getToken()}`,
