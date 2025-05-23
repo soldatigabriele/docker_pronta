@@ -1,7 +1,6 @@
 <template>
   <div>
     <h1>Welcome to Your Dashboard</h1>
-    
     <div v-if="user">
       <h2>User Information</h2>
       <p><strong>Name:</strong> {{ user.name }}</p>
