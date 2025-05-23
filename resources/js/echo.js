@@ -20,7 +20,7 @@ const echoConfig = {
     forceTLS: false,
     useTLS: false,
     encrypted: false,
-    enabledTransports: ['ws'],
+    enabledTransports: ['wss'],
     disableStats: true,
     cluster: '',
     authEndpoint: 'https://pronta.test/broadcasting/auth',
