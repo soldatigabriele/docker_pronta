@@ -37,6 +37,43 @@
         </div>
       </div>
 
+      <!-- Pending Share Invitations -->
+      <div v-if="pendingShares.length > 0" class="pending-shares-section">
+        <div class="section-header">
+          <h2>📨 Pending Invitations</h2>
+        </div>
+        
+        <div class="pending-shares-list">
+          <div 
+            v-for="share in pendingShares" 
+            :key="share.id" 
+            class="pending-share-item"
+          >
+            <div class="share-info">
+              <h4>{{ share.reusable_list.name }}</h4>
+              <p>Shared by {{ share.shared_by?.name || 'Unknown' }}</p>
+              <span class="permission-badge">{{ share.permission_level }}</span>
+            </div>
+            <div class="share-actions">
+              <button 
+                @click="acceptShare(share)" 
+                :disabled="processingShare === share.id"
+                class="accept-btn"
+              >
+                ✓ Accept
+              </button>
+              <button 
+                @click="declineShare(share)" 
+                :disabled="processingShare === share.id"
+                class="decline-btn"
+              >
+                ✗ Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Lists Section -->
       <div class="lists-section">
         <div class="section-header">
@@ -76,6 +113,13 @@
                 <h3 class="list-name">{{ list.name }}</h3>
               </div>
               <div class="list-actions">
+                <button 
+                  @click.stop="shareList(list)" 
+                  class="share-btn"
+                  :title="'Share list'"
+                >
+                  👥
+                </button>
                 <button 
                   @click.stop="togglePin(list)" 
                   :disabled="pinningList === list.id"
@@ -178,7 +222,7 @@
       </div>
     </div>
 
-    <!-- Create List Modal (Simple for now) -->
+    <!-- Create List Modal -->
     <div v-if="showCreateList" class="modal-overlay" @click="closeCreateList">
       <div class="modal-content" @click.stop>
         <h3>Create New List</h3>
@@ -223,6 +267,48 @@
         </form>
       </div>
     </div>
+
+    <!-- Share List Modal -->
+    <div v-if="showShareModal" class="modal-overlay" @click="closeShareModal">
+      <div class="modal-content" @click.stop>
+        <h3>Share "{{ selectedList?.name }}"</h3>
+        <form @submit.prevent="submitShare">
+          <div class="form-group">
+            <label for="shareEmail">Email Address</label>
+            <input 
+              id="shareEmail"
+              v-model="shareForm.email" 
+              type="email" 
+              placeholder="Enter email address"
+              required
+            >
+          </div>
+          <div class="form-group">
+            <label for="permissionLevel">Permission Level</label>
+            <select id="permissionLevel" v-model="shareForm.permission_level" required>
+              <option value="view">View Only</option>
+              <option value="edit">Can Edit</option>
+              <option value="admin">Admin (can share)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="shareForm.can_share"
+              >
+              Allow this user to share with others
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" @click="closeShareModal" class="cancel-btn">Cancel</button>
+            <button type="submit" :disabled="sharingList" class="share-btn">
+              {{ sharingList ? 'Sharing...' : 'Share List' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -250,7 +336,17 @@ export default {
       },
       recentActivity: [], // Will be populated with recent completions/additions
       error: null,
-      pinningList: null
+      pinningList: null,
+      showShareModal: false,
+      selectedList: null,
+      shareForm: {
+        email: '',
+        permission_level: 'view',
+        can_share: false
+      },
+      processingShare: null,
+      sharingList: false,
+      pendingShares: []
     }
   },
   
@@ -302,6 +398,11 @@ export default {
   
   mounted() {
     this.initializeData()
+    this.setupRealTimeUpdates()
+  },
+  
+  beforeUnmount() {
+    this.cleanupRealTimeUpdates()
   },
   
   methods: {
@@ -314,8 +415,11 @@ export default {
         await this.refreshUser()
       }
       
-      // Load lists
-      await this.loadLists()
+      // Load lists and pending shares
+      await Promise.all([
+        this.loadLists(),
+        this.loadPendingShares()
+      ])
     },
     
     async refreshUser() {
@@ -349,11 +453,90 @@ export default {
       }
     },
     
+    async loadPendingShares() {
+      try {
+        const shares = await listService.getMyShares()
+        this.pendingShares = shares.pending || []
+      } catch (error) {
+        console.error('Failed to load pending shares:', error)
+      }
+    },
+    
     async refreshData() {
       await Promise.all([
         this.refreshUser(),
-        this.loadLists()
+        this.loadLists(),
+        this.loadPendingShares()
       ])
+    },
+    
+    setupRealTimeUpdates() {
+      if (!window.Echo || !this.user) return
+      
+      // Listen for list updates on the user's private channel
+      window.Echo.private(`user.${this.user.id}`)
+        .listen('list.updated', (e) => {
+          console.log('List updated:', e)
+          this.handleListUpdate(e.list)
+        })
+        .listen('list.shared', (e) => {
+          console.log('List shared:', e)
+          this.handleListShared(e.share)
+        })
+        .listen('list.item.updated', (e) => {
+          console.log('List item updated:', e)
+          this.handleListItemUpdate(e)
+        })
+    },
+    
+    cleanupRealTimeUpdates() {
+      if (!window.Echo || !this.user) return
+      
+      window.Echo.leave(`user.${this.user.id}`)
+    },
+    
+    handleListUpdate(updatedList) {
+      const listIndex = this.lists.findIndex(l => l.id === updatedList.id)
+      if (listIndex !== -1) {
+        // Update existing list
+        this.lists[listIndex] = { ...this.lists[listIndex], ...updatedList }
+      } else {
+        // Add new list if it doesn't exist
+        this.lists.push(updatedList)
+      }
+      
+      // Refresh item counts for the updated list
+      this.refreshListCounts(updatedList.id)
+    },
+    
+    handleListShared(share) {
+      // Add to pending shares
+      this.pendingShares.push(share)
+    },
+    
+    handleListItemUpdate(data) {
+      // Refresh item counts for the affected list
+      this.refreshListCounts(data.list_id)
+    },
+    
+    async refreshListCounts(listId) {
+      try {
+        const items = await listService.getListItems(listId)
+        const totalItems = items.length
+        const completedItems = items.filter(item => item.is_completed).length
+        const pendingItems = totalItems - completedItems
+        
+        const listIndex = this.lists.findIndex(l => l.id === listId)
+        if (listIndex !== -1) {
+          this.lists[listIndex].item_counts = {
+            total: totalItems,
+            completed: completedItems,
+            pending: pendingItems
+          }
+        }
+      } catch (error) {
+        console.error('Failed to refresh list counts:', error)
+      }
     },
     
     async createList() {
@@ -494,6 +677,82 @@ export default {
       } finally {
         this.pinningList = null
       }
+    },
+    
+    async shareList(list) {
+      this.selectedList = list
+      this.showShareModal = true
+    },
+    
+    async submitShare() {
+      if (!this.shareForm.email.trim()) return
+      
+      this.sharingList = true
+      
+      try {
+        await listService.shareList(this.selectedList.id, this.shareForm)
+        
+        // Update the local list data
+        const listIndex = this.lists.findIndex(l => l.id === this.selectedList.id)
+        if (listIndex !== -1) {
+          this.lists[listIndex].is_shared = true
+        }
+        
+        this.closeShareModal()
+        
+      } catch (error) {
+        console.error('Failed to share list:', error)
+        this.error = error.message
+      } finally {
+        this.sharingList = false
+      }
+    },
+    
+    closeShareModal() {
+      this.showShareModal = false
+      this.selectedList = null
+      this.shareForm = {
+        email: '',
+        permission_level: 'view',
+        can_share: false
+      }
+    },
+    
+    async acceptShare(share) {
+      this.processingShare = share.id
+      
+      try {
+        await listService.acceptShare(share.id)
+        
+        // Refresh lists to include the newly accepted shared list
+        await this.loadLists()
+        
+        // Remove from pending shares
+        this.pendingShares = this.pendingShares.filter(s => s.id !== share.id)
+        
+      } catch (error) {
+        console.error('Failed to accept share:', error)
+        this.error = error.message
+      } finally {
+        this.processingShare = null
+      }
+    },
+    
+    async declineShare(share) {
+      this.processingShare = share.id
+      
+      try {
+        await listService.declineShare(share.id)
+        
+        // Remove from pending shares
+        this.pendingShares = this.pendingShares.filter(s => s.id !== share.id)
+        
+      } catch (error) {
+        console.error('Failed to decline share:', error)
+        this.error = error.message
+      } finally {
+        this.processingShare = null
+      }
     }
   }
 }
@@ -506,7 +765,7 @@ export default {
   gap: 8px;
 }
 
-.pin-btn {
+.pin-btn, .share-btn {
   background: none;
   border: none;
   font-size: 16px;
@@ -517,12 +776,12 @@ export default {
   opacity: 0.6;
 }
 
-.pin-btn:hover {
+.pin-btn:hover, .share-btn:hover {
   opacity: 1;
   background-color: rgba(0, 0, 0, 0.1);
 }
 
-.pin-btn:disabled {
+.pin-btn:disabled, .share-btn:disabled {
   cursor: not-allowed;
   opacity: 0.3;
 }
@@ -530,6 +789,14 @@ export default {
 .pin-btn.pinned {
   opacity: 1;
   background-color: rgba(255, 215, 0, 0.2);
+}
+
+.share-btn {
+  color: #007AFF;
+}
+
+.share-btn:hover {
+  background-color: rgba(0, 122, 255, 0.1);
 }
 
 .shared-indicator {
@@ -559,5 +826,227 @@ export default {
   font-size: 14px;
   color: #666;
   opacity: 0.8;
+}
+
+/* Pending Shares Section */
+.pending-shares-section {
+  margin-bottom: 32px;
+}
+
+.pending-shares-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pending-share-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.share-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.share-info p {
+  margin: 0 0 8px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.permission-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #e3f2fd;
+  color: #1976d2;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.share-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.accept-btn, .decline-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.accept-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.accept-btn:hover {
+  background: #45a049;
+}
+
+.decline-btn {
+  background: #f44336;
+  color: white;
+}
+
+.decline-btn:hover {
+  background: #da190b;
+}
+
+.accept-btn:disabled, .decline-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-content h3 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto !important;
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.cancel-btn, .create-btn, .share-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
+}
+
+.create-btn, .share-btn {
+  background: #007AFF;
+  color: white;
+}
+
+.create-btn:hover, .share-btn:hover {
+  background: #0056b3;
+}
+
+.create-btn:disabled, .share-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .pending-share-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .share-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .modal-content {
+    margin: 20px;
+    width: calc(100% - 40px);
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+  }
+  
+  .cancel-btn, .create-btn, .share-btn {
+    width: 100%;
+  }
 }
 </style> 

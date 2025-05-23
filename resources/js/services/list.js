@@ -147,6 +147,70 @@ class ListService {
     }
   }
 
+  // Share-related methods
+  async getListShares(listId) {
+    try {
+      const response = await axios.get(`${this.baseURL}/lists/${listId}/shares`)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch list shares')
+    }
+  }
+
+  async shareList(listId, shareData) {
+    try {
+      const response = await axios.post(`${this.baseURL}/lists/${listId}/shares`, shareData)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to share list')
+    }
+  }
+
+  async updateShare(listId, shareId, shareData) {
+    try {
+      const response = await axios.patch(`${this.baseURL}/lists/${listId}/shares/${shareId}`, shareData)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to update share')
+    }
+  }
+
+  async removeShare(listId, shareId) {
+    try {
+      const response = await axios.delete(`${this.baseURL}/lists/${listId}/shares/${shareId}`)
+      return response.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to remove share')
+    }
+  }
+
+  async getMyShares() {
+    try {
+      const response = await axios.get(`${this.baseURL}/shares/my-shares`)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch my shares')
+    }
+  }
+
+  async acceptShare(shareId) {
+    try {
+      const response = await axios.post(`${this.baseURL}/shares/${shareId}/accept`)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to accept share')
+    }
+  }
+
+  async declineShare(shareId) {
+    try {
+      const response = await axios.post(`${this.baseURL}/shares/${shareId}/decline`)
+      return response.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to decline share')
+    }
+  }
+
   // Helper method to get item counts for lists
   async getListsWithCounts() {
     try {

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\ListShare;
 use App\Models\ReusableList;
 use App\Models\User;
+use App\Events\ListShared;
+use App\Events\ListUpdated;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -90,6 +92,12 @@ class ListShareController extends Controller
 
         $share->load('sharedWith:id,name,email', 'sharedBy:id,name,email');
 
+        // Broadcast the share event to the target user
+        broadcast(new ListShared($share));
+
+        // Broadcast list update to all users with access
+        broadcast(new ListUpdated($reusableList));
+
         return response()->json([
             'success' => true,
             'data' => $share,
@@ -124,6 +132,9 @@ class ListShareController extends Controller
         $listShare->update($validated);
         $listShare->load('sharedWith:id,name,email', 'sharedBy:id,name,email');
 
+        // Broadcast list update to all users with access
+        broadcast(new ListUpdated($reusableList));
+
         return response()->json([
             'success' => true,
             'data' => $listShare,
@@ -155,6 +166,9 @@ class ListShareController extends Controller
         if ($reusableList->shares()->count() === 0) {
             $reusableList->update(['is_shared' => false]);
         }
+
+        // Broadcast list update to all users with access
+        broadcast(new ListUpdated($reusableList));
 
         return response()->json([
             'success' => true,
@@ -189,6 +203,9 @@ class ListShareController extends Controller
 
         $listShare->accept();
         $listShare->load('reusableList', 'sharedBy:id,name,email');
+
+        // Broadcast list update to all users with access
+        broadcast(new ListUpdated($listShare->reusableList));
 
         return response()->json([
             'success' => true,

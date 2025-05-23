@@ -16,13 +16,10 @@ return new class extends Migration
             $table->foreignId('reusable_list_id')->constrained()->onDelete('cascade');
             $table->foreignId('created_by_user_id')->constrained('users')->onDelete('cascade');
             $table->string('title');
-            $table->text('description')->nullable();
             $table->boolean('is_completed')->default(false);
             $table->timestamp('completed_at')->nullable();
             $table->foreignId('completed_by_user_id')->nullable()->constrained('users')->onDelete('set null');
             $table->integer('sort_order')->default(0);
-            $table->json('tags')->nullable(); // For autocomplete/tag functionality
-            $table->string('category')->nullable(); // For grouping items
             $table->integer('usage_count')->default(0); // Track how often item is reactivated
             $table->timestamp('last_used_at')->nullable();
             $table->timestamps();

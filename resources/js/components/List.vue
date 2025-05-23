@@ -273,6 +273,11 @@ export default {
   async mounted() {
     await this.loadList();
     await this.loadItems();
+    this.setupRealTimeUpdates();
+  },
+
+  beforeUnmount() {
+    this.cleanupRealTimeUpdates();
   },
 
   methods: {
@@ -309,6 +314,52 @@ export default {
       }
     },
 
+    setupRealTimeUpdates() {
+      if (!window.Echo || !authService.getUser()) return;
+      
+      const user = authService.getUser();
+      
+      // Listen for list and item updates on the user's private channel
+      window.Echo.private(`user.${user.id}`)
+        .listen('list.updated', (e) => {
+          console.log('List updated:', e);
+          if (e.list.id === parseInt(this.listId)) {
+            this.handleListUpdate(e.list);
+          }
+        })
+        .listen('list.item.updated', (e) => {
+          console.log('List item updated:', e);
+          if (e.list_id === parseInt(this.listId)) {
+            this.handleItemUpdate(e.item);
+          }
+        });
+    },
+    
+    cleanupRealTimeUpdates() {
+      if (!window.Echo || !authService.getUser()) return;
+      
+      const user = authService.getUser();
+      window.Echo.leave(`user.${user.id}`);
+    },
+    
+    handleListUpdate(updatedList) {
+      // Update list information
+      this.list = { ...this.list, ...updatedList };
+      this.editListData = { ...this.list };
+    },
+    
+    handleItemUpdate(updatedItem) {
+      const itemIndex = this.items.findIndex(item => item.id === updatedItem.id);
+      
+      if (itemIndex !== -1) {
+        // Update existing item
+        this.items[itemIndex] = updatedItem;
+      } else {
+        // Add new item if it doesn't exist
+        this.items.unshift(updatedItem);
+      }
+    },
+
     async refreshList() {
       await Promise.all([this.loadList(), this.loadItems()]);
     },
@@ -326,8 +377,10 @@ export default {
         };
 
         const createdItem = await listService.createItem(this.listId, itemData);
-        this.items.unshift(createdItem);
-
+        
+        // Don't add to local items here - let the real-time update handle it
+        // This prevents duplicate items when the broadcast event comes back
+        
         // Reset form
         this.newItem = {
           title: "",
@@ -360,7 +413,7 @@ export default {
         );
         console.log("API response:", updatedItem);
 
-        // Update the item in the list
+        // Update the item in the list immediately for better UX
         const index = this.items.findIndex((i) => i.id === item.id);
         if (index !== -1) {
           this.items[index] = updatedItem;
@@ -401,7 +454,7 @@ export default {
           itemData
         );
 
-        // Update the item in the list
+        // Update the item in the list immediately for better UX
         const index = this.items.findIndex((i) => i.id === this.editingItem);
         if (index !== -1) {
           this.items[index] = updatedItem;
@@ -424,6 +477,8 @@ export default {
 
       try {
         await listService.deleteItem(this.listId, item.id);
+        
+        // Remove from local items immediately for better UX
         this.items = this.items.filter((i) => i.id !== item.id);
       } catch (error) {
         console.error("Failed to delete item:", error);

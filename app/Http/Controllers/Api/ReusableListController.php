@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ReusableList;
 use App\Models\User;
+use App\Events\ListUpdated;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -61,6 +62,9 @@ class ReusableListController extends Controller
 
         $list = ReusableList::create($validated);
         $list->load('user:id,name,email');
+
+        // Broadcast the list creation
+        broadcast(new ListUpdated($list));
 
         return response()->json([
             'success' => true,
@@ -120,6 +124,9 @@ class ReusableListController extends Controller
         $reusableList->update($validated);
         $reusableList->load('user:id,name,email');
 
+        // Broadcast the list update
+        broadcast(new ListUpdated($reusableList));
+
         return response()->json([
             'success' => true,
             'data' => $reusableList,
@@ -137,6 +144,9 @@ class ReusableListController extends Controller
                 'message' => 'Unauthorized to delete this list',
             ], 403);
         }
+
+        // Broadcast the list deletion before deleting
+        broadcast(new ListUpdated($reusableList));
 
         $reusableList->delete();
 
@@ -166,6 +176,9 @@ class ReusableListController extends Controller
         ]);
 
         $reusableList->load('user:id,name,email');
+
+        // Broadcast the pin status change
+        broadcast(new ListUpdated($reusableList));
 
         $message = $validated['is_pinned'] ? 'List pinned successfully' : 'List unpinned successfully';
 
