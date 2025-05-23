@@ -7,6 +7,7 @@ use App\Models\ListItem;
 use App\Models\ReusableList;
 use App\Models\ItemUsageStat;
 use App\Models\User;
+use App\Events\ListItemUpdated;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -120,6 +121,9 @@ class ListItemController extends Controller
 
         $item->load('createdBy:id,name,email');
 
+        // Broadcast the item creation/update
+        broadcast(new ListItemUpdated($item));
+
         return response()->json([
             'success' => true,
             'data' => $item,
@@ -179,6 +183,9 @@ class ListItemController extends Controller
         $listItem->update($validated);
         $listItem->load('createdBy:id,name,email', 'completedBy:id,name,email');
 
+        // Broadcast the item update
+        broadcast(new ListItemUpdated($listItem));
+
         return response()->json([
             'success' => true,
             'data' => $listItem,
@@ -203,6 +210,9 @@ class ListItemController extends Controller
                 'message' => 'Item not found in this list',
             ], 404);
         }
+
+        // Broadcast the item deletion before deleting
+        broadcast(new ListItemUpdated($listItem));
 
         $listItem->delete();
 
@@ -244,6 +254,9 @@ class ListItemController extends Controller
         }
 
         $listItem->load('createdBy:id,name,email', 'completedBy:id,name,email');
+
+        // Broadcast the item update
+        broadcast(new ListItemUpdated($listItem));
 
         return response()->json([
             'success' => true,

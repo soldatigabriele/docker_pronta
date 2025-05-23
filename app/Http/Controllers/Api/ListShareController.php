@@ -239,8 +239,10 @@ class ListShareController extends Controller
 
         $pendingShares = ListShare::where('shared_with_user_id', $user->id)
             ->where('is_accepted', false)
-            ->whereNull('expires_at')
-            ->orWhere('expires_at', '>', now())
+            ->where(function ($query) {
+                $query->whereNull('expires_at')
+                      ->orWhere('expires_at', '>', now());
+            })
             ->with('reusableList', 'sharedBy:id,name,email')
             ->orderBy('invited_at', 'desc')
             ->get();
