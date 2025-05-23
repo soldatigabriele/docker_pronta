@@ -259,6 +259,13 @@ class ListShareController extends Controller
                 'pending' => $pendingShares,
                 'accepted' => $acceptedShares,
             ],
+            'debug' => [
+                'current_user_id' => $user->id,
+                'current_user_name' => $user->name,
+                'current_user_email' => $user->email,
+                'pending_count' => $pendingShares->count(),
+                'accepted_count' => $acceptedShares->count(),
+            ],
         ]);
     }
 } 

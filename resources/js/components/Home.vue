@@ -456,6 +456,8 @@ export default {
     async loadPendingShares() {
       try {
         const shares = await listService.getMyShares()
+        console.log('Pending shares debug info:', shares.debug)
+        console.log('Pending shares data:', shares)
         this.pendingShares = shares.pending || []
       } catch (error) {
         console.error('Failed to load pending shares:', error)
