@@ -77,6 +77,65 @@ class ListService {
     }
   }
 
+  // Item management methods
+  async createItem(listId, itemData) {
+    try {
+      const response = await axios.post(`${this.baseURL}/lists/${listId}/items`, itemData)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to create item')
+    }
+  }
+
+  async updateItem(listId, itemId, itemData) {
+    try {
+      const response = await axios.put(`${this.baseURL}/lists/${listId}/items/${itemId}`, itemData)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to update item')
+    }
+  }
+
+  async deleteItem(listId, itemId) {
+    try {
+      const response = await axios.delete(`${this.baseURL}/lists/${listId}/items/${itemId}`)
+      return response.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to delete item')
+    }
+  }
+
+  async toggleItemCompletion(listId, itemId) {
+    try {
+      const response = await axios.patch(`${this.baseURL}/lists/${listId}/items/${itemId}/toggle-complete`)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to toggle item completion')
+    }
+  }
+
+  async reorderItems(listId, itemIds) {
+    try {
+      const response = await axios.post(`${this.baseURL}/lists/${listId}/items/reorder`, {
+        item_ids: itemIds
+      })
+      return response.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to reorder items')
+    }
+  }
+
+  async autocompleteItems(query) {
+    try {
+      const response = await axios.get(`${this.baseURL}/items/autocomplete`, {
+        params: { q: query }
+      })
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to get autocomplete suggestions')
+    }
+  }
+
   // Helper method to get item counts for lists
   async getListsWithCounts() {
     try {
