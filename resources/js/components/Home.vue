@@ -219,6 +219,10 @@
           <span class="action-icon">↻</span>
           <span>Refresh</span>
         </button>
+        <button @click="testWebSocket" class="quick-action-btn">
+          <span class="action-icon">🔌</span>
+          <span>Test WS</span>
+        </button>
       </div>
     </div>
 
@@ -475,20 +479,35 @@ export default {
     setupRealTimeUpdates() {
       if (!window.Echo || !this.user) return
       
+      console.log('🔌 Setting up real-time updates for user:', this.user.id)
+      
       // Listen for list updates on the user's private channel
-      window.Echo.private(`user.${this.user.id}`)
+      const channel = window.Echo.private(`user.${this.user.id}`)
+      
+      console.log('📡 Subscribing to channel:', `user.${this.user.id}`)
+      
+      channel
         .listen('list.updated', (e) => {
-          console.log('List updated:', e)
+          console.log('📝 List updated event received:', e)
           this.handleListUpdate(e.list)
         })
         .listen('list.shared', (e) => {
-          console.log('List shared:', e)
+          console.log('👥 List shared event received:', e)
           this.handleListShared(e.share)
         })
         .listen('list.item.updated', (e) => {
-          console.log('List item updated:', e)
+          console.log('✏️ List item updated event received:', e)
           this.handleListItemUpdate(e)
         })
+        
+      // Debug channel subscription
+      channel.subscribed(() => {
+        console.log('✅ Successfully subscribed to user channel')
+      })
+      
+      channel.error((error) => {
+        console.log('❌ Channel subscription error:', error)
+      })
     },
     
     cleanupRealTimeUpdates() {
@@ -754,6 +773,18 @@ export default {
         this.error = error.message
       } finally {
         this.processingShare = null
+      }
+    },
+    
+    testWebSocket() {
+      console.log('🧪 Testing WebSocket connection...')
+      console.log('Echo instance:', window.Echo)
+      console.log('Connection state:', window.Echo?.connector?.pusher?.connection?.state)
+      
+      if (window.Echo && this.user) {
+        // Test by trying to subscribe to a test channel
+        const testChannel = window.Echo.private(`user.${this.user.id}`)
+        console.log('Test channel created:', testChannel)
       }
     }
   }
