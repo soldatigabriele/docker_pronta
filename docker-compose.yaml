@@ -9,6 +9,7 @@ services:
     ports:
       - "8080:80"
     volumes:
+      - .:/var/www/html
       - ./docker/sqlite/database.sqlite:/var/www/html/database/database.sqlite
     environment:
       - APACHE_DOCUMENT_ROOT=/var/www/html/public
