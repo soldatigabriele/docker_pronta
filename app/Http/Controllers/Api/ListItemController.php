@@ -28,18 +28,40 @@ class ListItemController extends Controller
         $query = $reusableList->items()
             ->with('createdBy:id,name,email', 'completedBy:id,name,email');
 
-        // Filter by completion status
+        // Filter by completion status if specified
         if ($request->has('completed')) {
             $query->where('is_completed', $request->boolean('completed'));
-        }
-
-        // Sort completed items by popularity (usage_count)
-        if ($request->boolean('completed')) {
-            $query->orderBy('usage_count', 'desc')
-                  ->orderBy('last_used_at', 'desc');
+            
+            // Sort based on completion status
+            if ($request->boolean('completed')) {
+                $query->orderBy('usage_count', 'desc')
+                      ->orderBy('last_used_at', 'desc');
+            } else {
+                $query->orderBy('sort_order')
+                      ->orderBy('created_at');
+            }
         } else {
-            $query->orderBy('sort_order')
-                  ->orderBy('created_at');
+            // When fetching all items, we need custom sorting
+            // First get all items, then sort them properly
+            $items = $query->get();
+            
+            // Separate pending and completed items
+            $pendingItems = $items->filter(fn($item) => !$item->is_completed)
+                                 ->sortBy(['sort_order', 'created_at'])
+                                 ->values();
+            
+            $completedItems = $items->filter(fn($item) => $item->is_completed)
+                                   ->sortByDesc('usage_count')
+                                   ->sortByDesc('last_used_at')
+                                   ->values();
+            
+            // Combine them: pending items first, then completed items
+            $sortedItems = $pendingItems->concat($completedItems);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $sortedItems,
+            ]);
         }
 
         $items = $query->get();
@@ -63,10 +85,6 @@ class ListItemController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'tags' => 'nullable|array',
-            'tags.*' => 'string|max:50',
-            'category' => 'nullable|string|max:100',
             'sort_order' => 'integer|min:0',
         ]);
 
@@ -82,8 +100,6 @@ class ListItemController extends Controller
                 'completed_by_user_id' => null,
                 'usage_count' => $existingItem->usage_count + 1,
                 'last_used_at' => now(),
-                'tags' => $validated['tags'] ?? $existingItem->tags,
-                'category' => $validated['category'] ?? $existingItem->category,
             ]);
 
             $item = $existingItem;
@@ -100,12 +116,7 @@ class ListItemController extends Controller
         }
 
         // Update usage statistics
-        ItemUsageStat::createOrUpdateStat(
-            $user,
-            $validated['title'],
-            $validated['tags'] ?? null,
-            $validated['category'] ?? null
-        );
+        ItemUsageStat::createOrUpdateStat($user, $validated['title']);
 
         $item->load('createdBy:id,name,email');
 
@@ -162,10 +173,6 @@ class ListItemController extends Controller
 
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
-            'description' => 'nullable|string',
-            'tags' => 'nullable|array',
-            'tags.*' => 'string|max:50',
-            'category' => 'nullable|string|max:100',
             'sort_order' => 'integer|min:0',
         ]);
 
@@ -230,12 +237,7 @@ class ListItemController extends Controller
             $listItem->markCompleted($user);
             
             // Update usage statistics
-            $stat = ItemUsageStat::createOrUpdateStat(
-                $user,
-                $listItem->title,
-                $listItem->tags,
-                $listItem->category
-            );
+            $stat = ItemUsageStat::createOrUpdateStat($user, $listItem->title);
             $stat->incrementCompletion();
             
             $message = 'Item marked as complete';
@@ -295,7 +297,7 @@ class ListItemController extends Controller
             ->orderBy('usage_count', 'desc')
             ->orderBy('completion_rate', 'desc')
             ->limit(10)
-            ->get(['item_title', 'tags', 'category', 'usage_count', 'completion_rate']);
+            ->get(['item_title', 'usage_count', 'completion_rate']);
 
         return response()->json([
             'success' => true,

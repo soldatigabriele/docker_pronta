@@ -10,7 +10,6 @@ class ItemUsageStat extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'tags' => 'array',
         'usage_count' => 'integer',
         'completion_count' => 'integer',
         'first_used_at' => 'datetime',
@@ -23,7 +22,7 @@ class ItemUsageStat extends Model
         return $this->belongsTo(User::class);
     }
 
-    public static function createOrUpdateStat(User $user, string $title, ?array $tags = null, ?string $category = null): self
+    public static function createOrUpdateStat(User $user, string $title): self
     {
         $hash = hash('sha256', strtolower(trim($title)));
         
@@ -36,14 +35,10 @@ class ItemUsageStat extends Model
             $stat->increment('usage_count');
             $stat->update([
                 'last_used_at' => now(),
-                'tags' => $tags ?: $stat->tags,
-                'category' => $category ?: $stat->category,
             ]);
         } else {
             $stat->fill([
                 'item_title' => $title,
-                'tags' => $tags,
-                'category' => $category,
                 'usage_count' => 1,
                 'first_used_at' => now(),
                 'last_used_at' => now(),

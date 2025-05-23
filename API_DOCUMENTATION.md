@@ -219,12 +219,9 @@ GET /api/lists/{list_id}/items
         {
             "id": 1,
             "title": "Buy milk",
-            "description": "2% milk from organic section",
             "is_completed": false,
             "completed_at": null,
             "sort_order": 0,
-            "tags": ["dairy", "organic"],
-            "category": "groceries",
             "usage_count": 5,
             "last_used_at": "2025-05-23T14:00:00.000000Z",
             "created_by_user_id": 1,
@@ -253,9 +250,6 @@ POST /api/lists/{list_id}/items
 ```json
 {
     "title": "Buy milk",
-    "description": "2% milk from organic section",
-    "tags": ["dairy", "organic"],
-    "category": "groceries",
     "sort_order": 0
 }
 ```
@@ -273,6 +267,14 @@ GET /api/lists/{list_id}/items/{item_id}
 PUT /api/lists/{list_id}/items/{item_id}
 ```
 *Requires authentication*
+
+**Request Body:**
+```json
+{
+    "title": "Buy organic milk",
+    "sort_order": 0
+}
+```
 
 ### Delete Item
 ```http
@@ -332,8 +334,6 @@ GET /api/items/autocomplete?q={query}
     "data": [
         {
             "item_title": "Buy milk",
-            "tags": ["dairy", "organic"],
-            "category": "groceries",
             "usage_count": 5,
             "completion_rate": 80.00
         }

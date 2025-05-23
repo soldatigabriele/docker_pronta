@@ -5,8 +5,9 @@ This project is a replacement for iOS Reminders app. It's mobile first, sleek de
 - create items in lists ✅
 - edit items and mark as done ✅
 - if trying to create an item that was previously created, pull it back ✅ (autocomplete feature)
-- user friendly: autocomplete/tag like when creating items ✅
+- user friendly: autocomplete when creating items ✅ (simplified, no tags)
 - order done items per times it has been used/reactivated (most popular items first) ✅
+- **SIMPLIFIED ITEMS**: Remove tags and description support, keep only title and usage tracking ✅ (NEW)
 
 Frontend stack
  - vue 3 : options api ✅
@@ -16,24 +17,34 @@ Frontend stack
 ## Current Status:
 
 ### ✅ Completed Components:
-- **Home.vue**: Dashboard showing all lists with stats, quick actions, and navigation
+- **Home.vue**: Dashboard showing all lists with stats, quick actions, and navigation ✅ (INCLUDING FULL iOS-STYLE STYLING)
 - **Login.vue**: User authentication 
-- **List.vue**: Full list management with item CRUD operations
+- **List.vue**: Full list management with simple item CRUD operations ✅ (SIMPLIFIED - NO TAGS/DESCRIPTIONS)
 
 ### ✅ Completed Features:
 - User authentication and authorization
 - List creation, editing, deletion
-- Item creation with autocomplete from previous items
-- Item editing (inline editing support)
+- **Simple item creation with autocomplete from previous items (no tags/descriptions)** ✅ (UPDATED)
+- **Simple item editing (title only)** ✅ (UPDATED)
 - Item completion toggling
 - Item deletion with confirmation
-- Smart autocomplete with usage statistics
-- Tag support for items
-- iOS-style responsive design
+- Smart autocomplete with usage statistics (title-based only)
+- **Removed tag support for items** ✅ (NEW)
+- **Removed description support for items** ✅ (NEW)
+- iOS-style responsive design ✅ (COMPREHENSIVE STYLING COMPLETED)
 - Permission-based UI (edit/view/admin permissions)
 - Quick stats (pending, completed, completion rate)
 - Completed items collapsible section
 - Time-based activity formatting
+- **HOME COMPONENT FULL STYLING** ✅ (NEW)
+  - iOS-inspired header with user greeting and actions
+  - Beautiful quick stats cards with proper spacing
+  - Sleek list cards with hover effects and color indicators
+  - Shared lists differentiation with purple accent
+  - Recent activity timeline with proper iconography
+  - Responsive design for mobile and desktop
+  - Elegant modal styling for list creation
+  - Comprehensive CSS variables for consistent theming
 
 ### ✅ Technical Implementation:
 - Vue 3 Options API
@@ -43,16 +54,19 @@ Frontend stack
 - Mobile-first responsive design
 - Optimistic UI updates
 - Error handling and user feedback
+- **Complete Home component styling with iOS aesthetics** ✅ (NEW)
+- **Simplified item model - title and usage tracking only** ✅ (NEW)
 
 ### 🔄 In Progress:
 - List sharing functionality (API ready, UI pending)
+- **Backend API updates for simplified items** 🔄 (NEW)
 
 ### 📋 TODO:
 - List sharing modal/component
 - Push notifications for shared list updates
 - Drag & drop reordering for items and lists
 - Search functionality across lists/items
-- Categories and smart lists
-- Item due dates and priorities
+- ~~Categories and smart lists~~ (removed with simplified items)
+- ~~Item due dates and priorities~~ (removed with simplified items)
 - Dark mode support
 - Offline support with sync

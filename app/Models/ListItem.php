@@ -13,7 +13,6 @@ class ListItem extends Model
         'is_completed' => 'boolean',
         'completed_at' => 'datetime',
         'last_used_at' => 'datetime',
-        'tags' => 'array',
         'usage_count' => 'integer',
         'sort_order' => 'integer',
     ];
