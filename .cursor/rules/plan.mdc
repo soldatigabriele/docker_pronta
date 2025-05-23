@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+the _planning folder contains the plan for this app. Update it as you feel necessary.
+if you feel it necessary, create a project file where you put the current state of the project, so you can reference that on future calls to speed up the process
