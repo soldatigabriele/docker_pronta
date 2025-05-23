@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ListItemController;
 use App\Http\Controllers\Api\ListShareController;
 use App\Http\Controllers\Api\ReusableListController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Broadcast;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,6 +26,11 @@ Route::prefix('auth')->group(function () {
 
 // Protected routes - require authentication
 Route::middleware(['auth:sanctum'])->group(function () {
+    
+    // Broadcasting authentication for WebSocket channels
+    Route::post('broadcasting/auth', function () {
+        return Broadcast::auth(request());
+    });
     
     // Authentication routes
     Route::prefix('auth')->group(function () {
