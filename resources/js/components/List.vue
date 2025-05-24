@@ -88,7 +88,7 @@
             </div>
 
             <!-- Regular pending items -->
-            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting, 'optimistic': item.isOptimistic }"
+            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting, 'optimistic': item.isOptimistic, 'swipedAway': item.swipedAway }"
                  @touchstart="handleTouchStart($event, item)"
                  @touchmove="handleTouchMove($event, item)"
                  @touchend="handleTouchEnd($event, item)">
@@ -99,7 +99,7 @@
 
                 <div class="item-info" @click="!item.deleting && !item.isOptimistic ? startEdit(item) : null">
                   <h4 class="item-title">{{ item.title }}</h4>
-                  <div v-if="item.usage_count > 1" class="item-meta">Used {{ item.usage_count }} times</div>
+                  <!-- <div v-if="item.usage_count > 1" class="item-meta">Used {{ item.usage_count }} times</div> -->
                   <!-- <div v-if="item.isOptimistic" class="item-meta optimistic-indicator">Processing...</div> -->
                 </div>
 
@@ -145,7 +145,7 @@
           </button>
 
           <div v-show="showCompleted" class="items-list">
-            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting, 'optimistic': item.isOptimistic }"
+            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting, 'optimistic': item.isOptimistic, 'swipedAway': item.swipedAway }"
                  @touchstart="handleTouchStart($event, item)"
                  @touchmove="handleTouchMove($event, item)"
                  @touchend="handleTouchEnd($event, item)">
@@ -158,11 +158,8 @@
                   <h4 class="item-title">{{ item.title }}</h4>
                   <div class="completion-info">
                     <span v-if="!item.isOptimistic">
-                      Completed {{ formatTimeAgo(item.completed_at) }}
-                      <span v-if="item.completed_by?.name">by {{ item.completed_by.name }}</span>
-                      <span v-if="item.usage_count > 1">• Used {{ item.usage_count }} times</span>
                     </span>
-                    <span v-else class="optimistic-indicator">Processing...</span>
+                    <span v-else class="optimistic-indicator"></span>
                   </div>
                 </div>
 
@@ -287,6 +284,7 @@ export default {
       swipeState: {
         itemId: null,
         startX: 0,
+        startY: 0,
         currentX: 0,
         isDragging: false,
         threshold: 80, // Minimum swipe distance to trigger delete
@@ -1145,6 +1143,7 @@ export default {
       }
 
       this.swipeState.startX = event.touches[0].clientX;
+      this.swipeState.startY = event.touches[0].clientY;
       this.swipeState.currentX = this.swipeState.startX;
       this.swipeState.itemId = item.id;
       this.swipeState.isDragging = false;
@@ -1153,12 +1152,18 @@ export default {
     handleTouchMove(event, item) {
       if (this.swipeState.itemId !== item.id) return;
 
-      event.preventDefault(); // Prevent scrolling
       this.swipeState.currentX = event.touches[0].clientX;
       const deltaX = this.swipeState.startX - this.swipeState.currentX;
+      const deltaY = Math.abs(event.touches[0].clientY - this.swipeState.startY);
 
       // Only handle right-to-left swipe (positive deltaX)
       if (deltaX > 10) {
+        // Only prevent default scrolling when we're actually swiping horizontally
+        // and the horizontal movement is greater than vertical movement
+        if (Math.abs(deltaX) > deltaY) {
+          event.preventDefault(); // Prevent scrolling only during horizontal swipe
+        }
+        
         this.swipeState.isDragging = true;
         
         // Apply transform to show swipe progress
@@ -1183,13 +1188,18 @@ export default {
       itemElement.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
       
       if (deltaX >= this.swipeState.threshold && this.swipeState.isDragging) {
-        // Trigger delete with animation
+        // Trigger delete with animation - keep the element swiped away
         itemElement.style.transform = `translateX(-100%)`;
         itemElement.style.opacity = '0';
         
-        setTimeout(() => {
-          this.deleteItem(item);
-        }, 300);
+        // Mark the item as being swiped away so it stays hidden during deletion
+        const itemIndex = this.items.findIndex((i) => i.id === item.id);
+        if (itemIndex !== -1) {
+          this.items[itemIndex] = { ...this.items[itemIndex], swipedAway: true };
+        }
+        
+        // Trigger deletion immediately without setTimeout
+        this.deleteItem(item);
       } else {
         // Reset position
         itemElement.style.transform = 'translateX(0)';
@@ -1199,17 +1209,9 @@ export default {
       // Reset swipe state
       this.swipeState.itemId = null;
       this.swipeState.startX = 0;
+      this.swipeState.startY = 0;
       this.swipeState.currentX = 0;
       this.swipeState.isDragging = false;
-
-      // Clear styles after animation
-      setTimeout(() => {
-        itemElement.style.transition = '';
-        if (!item.deleting) {
-          itemElement.style.transform = '';
-          itemElement.style.opacity = '';
-        }
-      }, 300);
     },
 
     // Share modal methods
@@ -1271,6 +1273,13 @@ export default {
   opacity: 0.5;
   pointer-events: none;
   position: relative;
+}
+
+.item-card.swipedAway {
+  transform: translateX(-100%) !important;
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: none !important;
 }
 
 .item-card.deleting::after {
