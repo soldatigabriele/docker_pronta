@@ -8,6 +8,8 @@ use App\Models\ReusableList;
 use App\Models\ItemUsageStat;
 use App\Models\User;
 use App\Events\ListItemUpdated;
+use App\Events\ListItemCreated;
+use App\Events\ListItemDeleted;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -121,8 +123,8 @@ class ListItemController extends Controller
 
         $item->load('createdBy:id,name,email');
 
-        // Broadcast the item creation/update
-        broadcast(new ListItemUpdated($item));
+        // Broadcast the item creation
+        broadcast(new ListItemCreated($item));
 
         return response()->json([
             'success' => true,
@@ -211,8 +213,14 @@ class ListItemController extends Controller
             ], 404);
         }
 
-        // Broadcast the item deletion before deleting
-        broadcast(new ListItemUpdated($listItem));
+        // Load the item with necessary relationships before deleting
+        // Make sure we load the list with shares relationship for broadcasting
+        $listItem->load(['reusableList' => function($query) {
+            $query->with('shares.sharedWith');
+        }]);
+        
+        // Broadcast the item deletion BEFORE deleting
+        broadcast(new ListItemDeleted($listItem));
 
         $listItem->delete();
 

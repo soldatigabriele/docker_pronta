@@ -2,7 +2,21 @@
 
 ## Last Updated: December 19, 2024
 
-### ✅ Recent Fix: Pusher Auth Endpoint
+### ✅ Recent Fix: Real-time Item Deletion Sync
+**Issue**: When deleting items from shared lists, the deletion wasn't syncing to other users via Pusher real-time updates
+**Root Cause**: Missing Pusher event handler for `list.item.deleted` events in `List.vue`
+**Solution**: Added missing event handlers for item creation and deletion events
+
+**Changes Made**:
+- Added `list.item.created` event handler and `handleItemCreated()` method
+- Added `list.item.deleted` event handler and `handleItemDelete()` method  
+- Modified `deleteItem()` method to rely on real-time updates instead of immediate local removal
+- Added duplicate prevention logic in item creation handler
+
+**Files Modified**:
+- `resources/js/components/List.vue` - Added real-time event handlers for item CRUD operations
+
+### ✅ Previous Fix: Pusher Auth Endpoint
 **Issue**: 405 Method Not Allowed error for `POST /api/pusher/auth`
 **Root Cause**: Frontend was using `/api/pusher/auth` but backend route was `/api/broadcasting/auth`
 **Solution**: Updated frontend Pusher configuration in both `Home.vue` and `List.vue` to use correct endpoint
@@ -53,4 +67,19 @@ Vue.js Frontend (SPA)
 ├── Services: Auth service, List service
 ├── Real-time: Pusher integration for live updates
 └── Styling: SCSS with Bootstrap
-``` 
+```
+
+### 🔧 Current Issue: Item Deletion Problem
+**Issue**: Item deletion is completely broken - items don't delete locally and don't sync to other users
+**Root Cause Analysis**: 
+1. Backend broadcasts `ListItemUpdated` event BEFORE deleting item (flawed logic)
+2. Frontend was modified to rely on non-existent `list.item.deleted` events
+3. No separate event exists for item deletions
+
+**Current Fix Status**: 
+- ✅ Restored immediate local deletion for UX
+- ✅ Removed incorrect event handlers for non-existent events  
+- ✅ Added debugging to help diagnose remaining issues
+- ⚠️ Backend broadcasting logic still needs improvement for proper real-time deletion sync
+
+**Next Steps**: Backend needs a proper `ListItemDeleted` event or modified logic

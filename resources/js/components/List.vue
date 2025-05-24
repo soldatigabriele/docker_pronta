@@ -78,7 +78,7 @@
         <div v-if="pendingItems.length > 0" class="items-group">
           <h3 class="group-title">To Do</h3>
           <div class="items-list">
-            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id }">
+            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting }">
               <div v-if="editingItem !== item.id" class="item-content">
                 <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating">
                   <div class="checkbox">{{ item.updating ? '⟳' : (item.is_completed ? '✓' : '') }}</div>
@@ -117,7 +117,7 @@
           </button>
 
           <div v-show="showCompleted" class="items-list">
-            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed">
+            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting }">
               <div class="item-content">
                 <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating">
                   <div class="checkbox completed">{{ item.updating ? '⟳' : '✓' }}</div>
@@ -367,6 +367,13 @@ export default {
         console.log('❌ Channel subscription error:', error)
       })
       
+      // Add a catch-all event listener for debugging
+      this.userChannel.bind_global((eventName, data) => {
+        if (eventName.startsWith('list.')) {
+          console.log(`🔄 Received event: ${eventName}`, data)
+        }
+      })
+      
       // Listen for list updates
       this.userChannel.bind('list.updated', (data) => {
         console.log('📝 List updated event received:', data)
@@ -375,11 +382,31 @@ export default {
         }
       })
       
-      // Listen for list item updates
+      // Listen for list item creation
+      this.userChannel.bind('list.item.created', (data) => {
+        console.log('➕ List item created event received:', data)
+        if (data.list_id === parseInt(this.listId)) {
+          this.handleItemCreated(data.item)
+        }
+      })
+      
+      // Listen for list item updates (edits, completions)
       this.userChannel.bind('list.item.updated', (data) => {
         console.log('✏️ List item updated event received:', data)
         if (data.list_id === parseInt(this.listId)) {
           this.handleItemUpdate(data.item)
+        }
+      })
+      
+      // Listen for list item deletion
+      this.userChannel.bind('list.item.deleted', (data) => {
+        console.log('🗑️ List item deleted event received:', data)
+        console.log('🔍 Current listId:', parseInt(this.listId), 'Event listId:', data.list_id)
+        if (data.list_id === parseInt(this.listId)) {
+          console.log('✅ List ID matches, calling handleItemDeleted')
+          this.handleItemDeleted(data.item)
+        } else {
+          console.log('❌ List ID does not match, ignoring event')
         }
       })
       
@@ -417,15 +444,74 @@ export default {
       this.editListData = { ...this.list };
     },
     
+    handleItemCreated(createdItem) {
+      console.log('🔍 Handling item created:', createdItem)
+      
+      // Check if this is a duplicate of an optimistic item we already added
+      const optimisticItemIndex = this.items.findIndex(item => 
+        item.isOptimistic && 
+        item.title === createdItem.title &&
+        item.is_completed === createdItem.is_completed
+      );
+      
+      if (optimisticItemIndex !== -1) {
+        console.log('🔄 Replacing optimistic item with real item')
+        // Replace optimistic item with real item from server
+        this.items[optimisticItemIndex] = createdItem;
+      } else {
+        // Check if we already have this item by ID (to prevent duplicates)
+        const existingItemIndex = this.items.findIndex(item => item.id === createdItem.id);
+        if (existingItemIndex === -1) {
+          console.log('➕ Adding new item from real-time event')
+          // Only add if it's not already in the list
+          this.items.unshift(createdItem);
+        } else {
+          console.log('⚠️ Item already exists, skipping addition')
+        }
+      }
+    },
+    
     handleItemUpdate(updatedItem) {
+      console.log('🔍 Handling item update:', updatedItem)
+      
       const itemIndex = this.items.findIndex(item => item.id === updatedItem.id);
       
       if (itemIndex !== -1) {
-        // Update existing item
-        this.items[itemIndex] = updatedItem;
+        // Only update if it's not an optimistic update that we haven't replaced yet
+        if (!this.items[itemIndex].isOptimistic) {
+          console.log('📝 Updating existing item')
+          this.items[itemIndex] = updatedItem;
+        } else {
+          console.log('⏳ Skipping update for optimistic item')
+        }
       } else {
-        // Add new item if it doesn't exist
-        this.items.unshift(updatedItem);
+        console.log('⚠️ Received update for unknown item:', updatedItem.id)
+      }
+    },
+    
+    handleItemDeleted(deletedItem) {
+      console.log('🔍 Handling item deletion:', deletedItem)
+      
+      // Remove the item from the local list
+      const itemIndex = this.items.findIndex(item => item.id === deletedItem.id);
+      if (itemIndex !== -1) {
+        console.log('🗑️ Removing deleted item from list')
+        
+        // Clear any fallback timeout since the real-time event arrived
+        if (this.items[itemIndex].fallbackTimeout) {
+          clearTimeout(this.items[itemIndex].fallbackTimeout);
+          console.log('⏰ Cleared fallback timeout for real-time deletion');
+        }
+        
+        this.items.splice(itemIndex, 1);
+        
+        // Cancel edit if we're editing this item
+        if (this.editingItem === deletedItem.id) {
+          console.log('❌ Canceling edit for deleted item')
+          this.cancelEdit();
+        }
+      } else {
+        console.log('⚠️ Tried to delete item that was not found in local list')
       }
     },
 
@@ -439,41 +525,20 @@ export default {
       this.addingItem = true;
       this.error = null;
 
-      try {
-        const trimmedTitle = this.newItem.title.trim();
-        
-        // Check if an item with this title already exists (case-insensitive)
-        const existingItem = this.items.find(item => 
-          item.title.toLowerCase() === trimmedTitle.toLowerCase()
-        );
+      const trimmedTitle = this.newItem.title.trim();
+      
+      // Check if an item with this title already exists (case-insensitive)
+      const existingItem = this.items.find(item => 
+        item.title.toLowerCase() === trimmedTitle.toLowerCase()
+      );
 
-        if (existingItem) {
-          if (existingItem.is_completed) {
-            // If the item exists and is completed, bring it back to "to do"
-            await this.toggleComplete(existingItem);
-          }
-          // If the item exists and is not completed, just reset the form
-          // (no need to create a duplicate)
-          
-          // Reset form
-          this.newItem = {
-            title: "",
-            sort_order: 0,
-          };
-          this.hideAutocomplete();
-          return;
+      if (existingItem) {
+        if (existingItem.is_completed) {
+          // If the item exists and is completed, bring it back to "to do"
+          await this.toggleComplete(existingItem);
         }
-
-        // If no existing item found, create new one
-        const itemData = {
-          title: trimmedTitle,
-          sort_order: this.newItem.sort_order,
-        };
-
-        const createdItem = await listService.createItem(this.listId, itemData);
-        
-        // Don't add to local items here - let the real-time update handle it
-        // This prevents duplicate items when the broadcast event comes back
+        // If the item exists and is not completed, just reset the form
+        // (no need to create a duplicate)
         
         // Reset form
         this.newItem = {
@@ -481,9 +546,56 @@ export default {
           sort_order: 0,
         };
         this.hideAutocomplete();
+        this.addingItem = false;
+        return;
+      }
+
+      // Create optimistic item for immediate UI update
+      const optimisticItem = {
+        id: `temp-${Date.now()}`, // Temporary ID
+        title: trimmedTitle,
+        is_completed: false,
+        sort_order: this.newItem.sort_order,
+        usage_count: 1,
+        updating: false,
+        created_at: new Date().toISOString(),
+        isOptimistic: true // Flag to identify optimistic updates
+      };
+
+      try {
+        // Add optimistically to UI immediately
+        this.items.unshift(optimisticItem);
+        console.log('➕ Added optimistic item:', optimisticItem);
+
+        // Reset form immediately for better UX
+        this.newItem = {
+          title: "",
+          sort_order: 0,
+        };
+        this.hideAutocomplete();
+
+        const itemData = {
+          title: trimmedTitle,
+          sort_order: optimisticItem.sort_order,
+        };
+
+        console.log('📡 Creating item via API...');
+        const createdItem = await listService.createItem(this.listId, itemData);
+        console.log('✅ Item created via API, waiting for real-time event...');
+        
+        // Don't manually replace the optimistic item here
+        // Let the real-time event (handleItemCreated) handle the replacement
+        
       } catch (error) {
-        console.error("Failed to add item:", error);
+        console.error("❌ Failed to add item:", error);
         this.error = error.message;
+        
+        // Remove optimistic item on error
+        this.items = this.items.filter(item => item.id !== optimisticItem.id);
+        console.log('🗑️ Removed failed optimistic item');
+        
+        // Restore form data on error
+        this.newItem.title = trimmedTitle;
       } finally {
         this.addingItem = false;
       }
@@ -537,9 +649,20 @@ export default {
     async saveEdit() {
       if (!this.editingItemData.title.trim()) return;
 
+      const trimmedTitle = this.editingItemData.title.trim();
+      const itemIndex = this.items.findIndex((i) => i.id === this.editingItem);
+      let originalTitle = '';
+      
+      // Store original title for rollback if needed
+      if (itemIndex !== -1) {
+        originalTitle = this.items[itemIndex].title;
+        // Optimistically update the title immediately
+        this.items[itemIndex].title = trimmedTitle;
+      }
+
       try {
         const itemData = {
-          title: this.editingItemData.title.trim(),
+          title: trimmedTitle,
         };
 
         const updatedItem = await listService.updateItem(
@@ -548,16 +671,20 @@ export default {
           itemData
         );
 
-        // Update the item in the list immediately for better UX
-        const index = this.items.findIndex((i) => i.id === this.editingItem);
-        if (index !== -1) {
-          this.items[index] = updatedItem;
+        // Update with server response
+        if (itemIndex !== -1) {
+          this.items[itemIndex] = updatedItem;
         }
 
         this.cancelEdit();
       } catch (error) {
         console.error("Failed to update item:", error);
         this.error = error.message;
+        
+        // Rollback the optimistic update on error
+        if (itemIndex !== -1) {
+          this.items[itemIndex].title = originalTitle;
+        }
       }
     },
 
@@ -569,14 +696,58 @@ export default {
     async deleteItem(item) {
       if (!confirm(`Delete "${item.title}"?`)) return;
 
+      console.log('🗑️ Starting deletion for item:', item.id, item.title);
+
+      // Set a flag to indicate deletion is in progress
+      const itemIndex = this.items.findIndex((i) => i.id === item.id);
+      if (itemIndex !== -1) {
+        this.items[itemIndex] = { ...this.items[itemIndex], deleting: true };
+      }
+
       try {
+        console.log('📡 Calling deleteItem API...');
         await listService.deleteItem(this.listId, item.id);
+        console.log('✅ API call successful, waiting for real-time update...');
         
-        // Remove from local items immediately for better UX
-        this.items = this.items.filter((i) => i.id !== item.id);
+        // Set up a fallback timeout in case real-time event doesn't arrive
+        const fallbackTimeout = setTimeout(() => {
+          console.log('⏰ Real-time event timeout, removing item manually');
+          const currentIndex = this.items.findIndex((i) => i.id === item.id);
+          if (currentIndex !== -1) {
+            this.items.splice(currentIndex, 1);
+            
+            // Cancel edit if we're editing this item
+            if (this.editingItem === item.id) {
+              this.cancelEdit();
+            }
+          }
+        }, 3000); // 3 second fallback
+        
+        // Store the timeout ID on the item so we can clear it if the real-time event arrives
+        if (itemIndex !== -1) {
+          this.items[itemIndex] = { ...this.items[itemIndex], fallbackTimeout };
+        }
+        
+        // Don't remove from local items here - let the real-time event handle it
+        // The handleItemDeleted method will remove it when the broadcast event arrives
+        
       } catch (error) {
-        console.error("Failed to delete item:", error);
+        console.error("❌ Failed to delete item:", error);
         this.error = error.message;
+        
+        // Remove the deleting flag on error
+        if (itemIndex !== -1) {
+          this.items[itemIndex] = { ...this.items[itemIndex], deleting: false };
+          
+          // Clear any fallback timeout
+          if (this.items[itemIndex].fallbackTimeout) {
+            clearTimeout(this.items[itemIndex].fallbackTimeout);
+          }
+        }
+        
+        // Reload items on error to ensure consistency
+        console.log('🔄 Reloading items due to error...');
+        this.loadItems();
       }
     },
 
@@ -733,4 +904,26 @@ export default {
     },
   },
 };
-</script> 
+</script>
+
+<style scoped>
+.item-card.deleting {
+  opacity: 0.5;
+  pointer-events: none;
+  position: relative;
+}
+
+.item-card.deleting::after {
+  content: '🗑️';
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.item-card.deleting .item-actions {
+  opacity: 0.3;
+}
+</style> 
