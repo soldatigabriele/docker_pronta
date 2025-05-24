@@ -2,6 +2,25 @@
 
 ## Last Updated: December 19, 2024
 
+### ✅ New Features Added: Swipe-to-Delete & Enhanced Sharing
+**iOS-style Swipe-to-Delete**: Items can now be deleted by swiping right-to-left, similar to iOS reminders
+- Added touch event handlers for swipe detection
+- Visual feedback with opacity changes and delete hint
+- Smooth animations for swipe actions
+- Threshold-based deletion (80px minimum swipe)
+
+**Enhanced Sharing Modal**: Improved user experience for sharing lists
+- Dropdown to select users from the system
+- Clear permission level descriptions (View, Edit, Admin)
+- Loading states and proper error handling
+- New `/api/users` endpoint to fetch available users
+
+**Files Modified**:
+- `resources/js/components/List.vue` - Added swipe handlers and sharing modal
+- `resources/js/services/list.js` - Added `getUsers()` method
+- `app/Http/Controllers/Api/UserController.php` - New controller for user endpoints
+- `routes/api.php` - Added `/api/users` route
+
 ### ✅ Recent Fix: Real-time Item Deletion Sync
 **Issue**: When deleting items from shared lists, the deletion wasn't syncing to other users via Pusher real-time updates
 **Root Cause**: Missing Pusher event handler for `list.item.deleted` events in `List.vue`

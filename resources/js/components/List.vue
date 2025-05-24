@@ -6,7 +6,7 @@
         <div class="header-top">
           <button @click="goBack" class="back-btn">← Back</button>
           <div class="header-actions">
-            <button @click="showShareModal = true" v-if="canShare" class="share-btn">📤</button>
+            <button @click="openShareModal" v-if="canShare" class="share-btn">📤</button>
             <button @click="showEditModal = true" v-if="canEdit" class="edit-btn">✏️</button>
             <button @click="refreshList" :disabled="loading" class="refresh-btn">{{ loading ? '⟳' : '↻' }}</button>
           </div>
@@ -88,7 +88,10 @@
             </div>
 
             <!-- Regular pending items -->
-            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting, 'optimistic': item.isOptimistic }">
+            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting, 'optimistic': item.isOptimistic }"
+                 @touchstart="handleTouchStart($event, item)"
+                 @touchmove="handleTouchMove($event, item)"
+                 @touchend="handleTouchEnd($event, item)">
               <div v-if="editingItem !== item.id" class="item-content">
                 <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating || item.deleting || item.isOptimistic">
                   <div class="checkbox">{{ item.updating ? '⟳' : (item.is_completed ? '✓' : '') }}</div>
@@ -142,7 +145,10 @@
           </button>
 
           <div v-show="showCompleted" class="items-list">
-            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting, 'optimistic': item.isOptimistic }">
+            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting, 'optimistic': item.isOptimistic }"
+                 @touchstart="handleTouchStart($event, item)"
+                 @touchmove="handleTouchMove($event, item)"
+                 @touchend="handleTouchEnd($event, item)">
               <div class="item-content">
                 <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating || item.deleting || item.isOptimistic">
                   <div class="checkbox completed">{{ item.updating ? '⟳' : '✓' }}</div>
@@ -203,6 +209,38 @@
       </div>
     </div>
 
+    <!-- Share List Modal -->
+    <div v-if="showShareModal" class="modal-overlay" @click="closeShareModal">
+      <div class="modal-content" @click.stop>
+        <h3>Share List</h3>
+        <form @submit.prevent="shareList">
+          <div class="form-group">
+            <label for="shareUser">Select User</label>
+            <select id="shareUser" v-model="shareData.email" required :disabled="loadingUsers">
+              <option value="">{{ loadingUsers ? 'Loading users...' : 'Select a user' }}</option>
+              <option v-for="user in users" :key="user.id" :value="user.email">
+                {{ user.name }} ({{ user.email }})
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="permissionLevel">Permission Level</label>
+            <select id="permissionLevel" v-model="shareData.permission_level">
+              <option value="view">View Only - Can view list and items</option>
+              <option value="edit">Edit - Can view, add, edit, and complete items</option>
+              <option value="admin">Admin - Can do everything including sharing</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" @click="closeShareModal" class="cancel-btn">Cancel</button>
+            <button type="submit" :disabled="shareData.loading || !shareData.email" class="save-btn">
+              {{ shareData.loading ? 'Sharing...' : 'Share List' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Error Message -->
     <div v-if="error" class="error-banner">
       {{ error }}
@@ -244,7 +282,23 @@ export default {
       editListData: {},
       error: null,
       pusher: null,
-      userChannel: null
+      userChannel: null,
+      // Swipe-to-delete state
+      swipeState: {
+        itemId: null,
+        startX: 0,
+        currentX: 0,
+        isDragging: false,
+        threshold: 80, // Minimum swipe distance to trigger delete
+        maxDistance: 120 // Maximum swipe distance
+      },
+      shareData: {
+        email: '',
+        permission_level: 'view',
+        loading: false
+      },
+      users: [],
+      loadingUsers: false
     };
   },
 
@@ -1082,6 +1136,132 @@ export default {
         throw new Error(error.message || 'Failed to delete usage stat');
       }
     },
+
+    // Swipe-to-delete methods
+    handleTouchStart(event, item) {
+      // Don't allow swiping on optimistic items, editing items, or items being deleted
+      if (item.isOptimistic || item.deleting || this.editingItem === item.id || String(item.id).startsWith('temp-')) {
+        return;
+      }
+
+      this.swipeState.startX = event.touches[0].clientX;
+      this.swipeState.currentX = this.swipeState.startX;
+      this.swipeState.itemId = item.id;
+      this.swipeState.isDragging = false;
+    },
+
+    handleTouchMove(event, item) {
+      if (this.swipeState.itemId !== item.id) return;
+
+      event.preventDefault(); // Prevent scrolling
+      this.swipeState.currentX = event.touches[0].clientX;
+      const deltaX = this.swipeState.startX - this.swipeState.currentX;
+
+      // Only handle right-to-left swipe (positive deltaX)
+      if (deltaX > 10) {
+        this.swipeState.isDragging = true;
+        
+        // Apply transform to show swipe progress
+        const distance = Math.min(deltaX, this.swipeState.maxDistance);
+        const itemElement = event.currentTarget;
+        itemElement.style.transform = `translateX(-${distance}px)`;
+        itemElement.style.transition = 'none';
+        
+        // Update opacity based on swipe distance
+        const opacity = Math.max(0.3, 1 - (distance / this.swipeState.maxDistance));
+        itemElement.style.opacity = opacity;
+      }
+    },
+
+    handleTouchEnd(event, item) {
+      if (this.swipeState.itemId !== item.id) return;
+
+      const deltaX = this.swipeState.startX - this.swipeState.currentX;
+      const itemElement = event.currentTarget;
+
+      // Reset transform and transition
+      itemElement.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      
+      if (deltaX >= this.swipeState.threshold && this.swipeState.isDragging) {
+        // Trigger delete with animation
+        itemElement.style.transform = `translateX(-100%)`;
+        itemElement.style.opacity = '0';
+        
+        setTimeout(() => {
+          this.deleteItem(item);
+        }, 300);
+      } else {
+        // Reset position
+        itemElement.style.transform = 'translateX(0)';
+        itemElement.style.opacity = '1';
+      }
+
+      // Reset swipe state
+      this.swipeState.itemId = null;
+      this.swipeState.startX = 0;
+      this.swipeState.currentX = 0;
+      this.swipeState.isDragging = false;
+
+      // Clear styles after animation
+      setTimeout(() => {
+        itemElement.style.transition = '';
+        if (!item.deleting) {
+          itemElement.style.transform = '';
+          itemElement.style.opacity = '';
+        }
+      }, 300);
+    },
+
+    // Share modal methods
+    async openShareModal() {
+      this.showShareModal = true;
+      await this.loadUsers();
+    },
+
+    async loadUsers() {
+      this.loadingUsers = true;
+      try {
+        // We'll need to add this API endpoint
+        this.users = await listService.getUsers();
+      } catch (error) {
+        console.error('Failed to load users:', error);
+        this.error = 'Failed to load users for sharing';
+        this.users = [];
+      } finally {
+        this.loadingUsers = false;
+      }
+    },
+
+    async shareList() {
+      if (!this.shareData.email) {
+        this.error = 'Please select a user to share with';
+        return;
+      }
+
+      this.shareData.loading = true;
+      try {
+        await listService.shareList(this.listId, {
+          email: this.shareData.email,
+          permission_level: this.shareData.permission_level
+        });
+        
+        this.closeShareModal();
+        // Refresh list to show updated share status
+        await this.loadList();
+      } catch (error) {
+        console.error('Failed to share list:', error);
+        this.error = error.message;
+      } finally {
+        this.shareData.loading = false;
+      }
+    },
+
+    closeShareModal() {
+      this.showShareModal = false;
+      this.shareData.email = '';
+      this.shareData.permission_level = 'view';
+      this.shareData.loading = false;
+    },
   },
 };
 </script>
@@ -1277,5 +1457,171 @@ export default {
   text-align: center;
   color: #666;
   font-size: 14px;
+}
+
+/* Swipe-to-delete styles */
+.item-card {
+  position: relative;
+  touch-action: pan-y; /* Allow vertical scrolling but handle horizontal swipes */
+  user-select: none;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.item-card.swiping {
+  transition: none;
+}
+
+/* Improved swipe visual feedback */
+.item-card::after {
+  content: '🗑️ Swipe to delete';
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #ff3b30;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: -1;
+}
+
+.item-card.deleting::after {
+  opacity: 1;
+  z-index: 1;
+}
+
+/* Enhanced modal styling */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-content h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: #555;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.form-group select {
+  cursor: pointer;
+}
+
+.form-group select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.cancel-btn,
+.save-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.cancel-btn {
+  background: #f8f9fa;
+  color: #6c757d;
+  border-color: #e1e5e9;
+}
+
+.cancel-btn:hover {
+  background: #e9ecef;
+  border-color: #d1d5db;
+}
+
+.save-btn {
+  background: #007AFF;
+  color: white;
+  border-color: #007AFF;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #0056b3;
+  border-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 122, 255, 0.2);
+}
+
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.add-new-item:hover {
+  opacity: 0.8;
+  border-color: #007AFF !important;
+  background: #f5f9ff;
 }
 </style> 

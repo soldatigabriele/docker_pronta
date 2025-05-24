@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ListItemController;
 use App\Http\Controllers\Api\ListShareController;
 use App\Http\Controllers\Api\ReusableListController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -37,6 +38,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('user', [AuthController::class, 'user']);
     });
+    
+    // Users (for sharing)
+    Route::get('users', [UserController::class, 'index']);
     
     // Reusable Lists
     Route::apiResource('lists', ReusableListController::class, [

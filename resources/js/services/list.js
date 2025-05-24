@@ -159,6 +159,15 @@ class ListService {
   }
 
   // Share-related methods
+  async getUsers() {
+    try {
+      const response = await axios.get(`${this.baseURL}/users`)
+      return response.data.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch users')
+    }
+  }
+
   async getListShares(listId) {
     try {
       const response = await axios.get(`${this.baseURL}/lists/${listId}/shares`)

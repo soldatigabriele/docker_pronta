@@ -112,6 +112,35 @@ GET /api/auth/user
 }
 ```
 
+## Users Endpoints
+
+### Get All Users (for sharing)
+```http
+GET /api/users
+```
+*Requires authentication*
+
+**Description:** Returns all users except the current user for sharing purposes.
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 2,
+            "name": "Jane Doe",
+            "email": "jane@example.com"
+        },
+        {
+            "id": 3,
+            "name": "Bob Smith",
+            "email": "bob@example.com"
+        }
+    ]
+}
+```
+
 ## Lists Endpoints
 
 ### Get All Lists
