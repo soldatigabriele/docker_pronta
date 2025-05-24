@@ -63,6 +63,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Autocomplete for item titles
     Route::get('items/autocomplete', [ListItemController::class, 'autocomplete']);
     
+    // Delete usage stats for autocomplete suggestions
+    Route::delete('items/usage-stats', [ListItemController::class, 'deleteUsageStat']);
+    
     // List Sharing
     Route::prefix('lists/{reusableList}/shares')->group(function () {
         Route::get('/', [ListShareController::class, 'index']);

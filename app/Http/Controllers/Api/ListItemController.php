@@ -305,6 +305,10 @@ class ListItemController extends Controller
     {
         $user = Auth::user();
         $query = $request->get('q', '');
+        $limit = $request->get('limit', 10); // Default to 10, allow up to 50
+
+        // Validate limit
+        $limit = min(max((int) $limit, 1), 50);
 
         // Reduce minimum query length for more reactive autocomplete
         if (strlen($query) < 1) {
@@ -333,12 +337,39 @@ class ListItemController extends Controller
                 usage_count DESC,
                 completion_rate DESC
             ")
-            ->limit(10)
+            ->limit($limit)
             ->get(['item_title', 'usage_count', 'completion_rate']);
 
         return response()->json([
             'success' => true,
             'data' => $suggestions,
+        ]);
+    }
+
+    public function deleteUsageStat(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+        
+        $validated = $request->validate([
+            'item_title' => 'required|string|max:255',
+        ]);
+
+        $stat = ItemUsageStat::where('user_id', $user->id)
+            ->where('item_title', $validated['item_title'])
+            ->first();
+
+        if (!$stat) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usage stat not found',
+            ], 404);
+        }
+
+        $stat->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Usage stat deleted successfully',
         ]);
     }
 

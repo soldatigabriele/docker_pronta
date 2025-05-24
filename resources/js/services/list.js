@@ -136,14 +136,25 @@ class ListService {
     }
   }
 
-  async autocompleteItems(query) {
+  async autocompleteItems(query, limit = 20) {
     try {
       const response = await axios.get(`${this.baseURL}/items/autocomplete`, {
-        params: { q: query }
+        params: { q: query, limit: limit }
       })
       return response.data.data
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to get autocomplete suggestions')
+    }
+  }
+
+  async deleteUsageStat(itemTitle) {
+    try {
+      const response = await axios.delete(`${this.baseURL}/items/usage-stats`, {
+        data: { item_title: itemTitle }
+      })
+      return response.data
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Failed to delete usage stat')
     }
   }
 

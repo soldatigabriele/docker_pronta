@@ -25,32 +25,13 @@
         </div>
       </div>
 
-      <!-- Add Item Form -->
-      <div v-if="canEdit" class="add-item-section">
-        <form @submit.prevent="addItem" class="add-item-form">
-          <div class="input-group">
-            <input v-model="newItem.title" ref="itemInput" type="text" placeholder="Add new item..." class="item-input" @input="handleAutocomplete" @focus="showAutocomplete = true" @blur="hideAutocomplete" />
-            <button type="submit" :disabled="!newItem.title.trim() || addingItem" class="add-btn">{{ addingItem ? '⟳' : '+' }}</button>
-          </div>
-
-          <!-- Autocomplete dropdown -->
-          <div v-if="showAutocomplete && (autocompleteResults.length > 0 || autocompleteLoading)" class="autocomplete-dropdown">
-            <div v-if="autocompleteLoading" class="autocomplete-loading">Searching...</div>
-            <div v-for="suggestion in autocompleteResults" :key="suggestion.item_title" @mousedown.prevent="selectSuggestion(suggestion)" class="autocomplete-item">
-              <div class="suggestion-title" v-html="suggestion.item_title"></div>
-              <div class="suggestion-meta">Used {{ suggestion.usage_count }} times • {{ Math.round(suggestion.completion_rate) }}% completion rate</div>
-            </div>
-          </div>
-        </form>
-      </div>
-
       <!-- Loading State -->
       <div v-if="loading && items.length === 0" class="loading-state">
         <p>Loading items...</p>
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="!loading && items.length === 0" class="empty-state">
+      <div v-else-if="!loading && items.length === 0 && !canEdit" class="empty-state">
         <div class="empty-icon">📋</div>
         <h3>No Items Yet</h3>
         <p>Add your first item to get started</p>
@@ -59,9 +40,54 @@
       <!-- Items List -->
       <div v-else class="items-section">
         <!-- Pending Items -->
-        <div v-if="pendingItems.length > 0" class="items-group">
+        <div class="items-group">
           <h3 class="group-title">To Do</h3>
           <div class="items-list">
+            <!-- Fake empty item for adding new items -->
+            <div v-if="canEdit" class="item-card add-new-item" :class="{ 'editing': editingItem === 'new' }">
+              <div v-if="editingItem !== 'new'" class="item-content" @click="startAddNew">
+                <div class="add-new-checkbox">
+                  <div class="checkbox empty"></div>
+                </div>
+                <div class="item-info add-new-info">
+                  <h4 class="item-title add-new-title">Add new item...</h4>
+                </div>
+              </div>
+              
+              <!-- Add new item form -->
+              <div v-else class="item-content">
+                <div class="add-new-checkbox">
+                  <div class="checkbox empty"></div>
+                </div>
+                <div class="item-info">
+                  <input 
+                    v-model="newItem.title" 
+                    ref="addInput" 
+                    type="text" 
+                    placeholder="Add new item..." 
+                    class="inline-edit-input" 
+                    @blur="handleAddBlur"
+                    @keyup.enter="addItem" 
+                    @keyup.escape="cancelAdd"
+                    @input="handleAutocomplete"
+                  />
+                  
+                  <!-- Autocomplete dropdown -->
+                  <div v-if="showAutocomplete && (autocompleteResults.length > 0 || autocompleteLoading)" class="autocomplete-dropdown">
+                    <div v-if="autocompleteLoading" class="autocomplete-loading">Searching...</div>
+                    <div v-for="suggestion in autocompleteResults" :key="suggestion.item_title" class="autocomplete-item">
+                      <div class="suggestion-content" @mousedown.prevent="selectSuggestion(suggestion)">
+                        <div class="suggestion-title" v-html="suggestion.item_title"></div>
+                        <div class="suggestion-meta">Used {{ suggestion.usage_count }} times • {{ Math.round(suggestion.completion_rate) }}% completion rate</div>
+                      </div>
+                      <button @mousedown.prevent="deleteSuggestion(suggestion)" class="delete-suggestion-btn" title="Delete this suggestion">🗑️</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Regular pending items -->
             <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting, 'optimistic': item.isOptimistic }">
               <div v-if="editingItem !== item.id" class="item-content">
                 <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating || item.deleting || item.isOptimistic">
@@ -71,7 +97,7 @@
                 <div class="item-info" @click="!item.deleting && !item.isOptimistic ? startEdit(item) : null">
                   <h4 class="item-title">{{ item.title }}</h4>
                   <div v-if="item.usage_count > 1" class="item-meta">Used {{ item.usage_count }} times</div>
-                  <div v-if="item.isOptimistic" class="item-meta optimistic-indicator">Processing...</div>
+                  <!-- <div v-if="item.isOptimistic" class="item-meta optimistic-indicator">Processing...</div> -->
                 </div>
 
                 <div class="item-actions">
@@ -79,12 +105,27 @@
                 </div>
               </div>
 
-              <!-- Edit Form -->
-              <div v-else class="edit-form">
-                <input v-model="editingItemData.title" type="text" class="edit-title-input" @keyup.enter="saveEdit" @keyup.escape="cancelEdit" ref="editInput" />
-                <div class="edit-actions">
-                  <button @click="saveEdit" class="save-btn">Save</button>
-                  <button @click="cancelEdit" class="cancel-btn">Cancel</button>
+              <!-- Inline Edit -->
+              <div v-else class="item-content">
+                <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating || item.deleting || item.isOptimistic">
+                  <div class="checkbox">{{ item.updating ? '⟳' : (item.is_completed ? '✓' : '') }}</div>
+                </button>
+
+                <div class="item-info">
+                  <input 
+                    v-model="editingItemData.title" 
+                    type="text" 
+                    class="inline-edit-input" 
+                    @blur="saveEdit" 
+                    @keyup.enter="saveEdit" 
+                    @keyup.escape="cancelEdit" 
+                    ref="editInput" 
+                  />
+                  <div v-if="item.usage_count > 1" class="item-meta">Used {{ item.usage_count }} times</div>
+                </div>
+
+                <div class="item-actions">
+                  <button v-if="canEdit" @click="deleteItem(item)" :disabled="item.deleting || item.isOptimistic" class="delete-item-btn">🗑️</button>
                 </div>
               </div>
             </div>
@@ -185,7 +226,9 @@ export default {
       addingItem: false,
       updatingList: false,
       editingItem: null,
-      editingItemData: {},
+      editingItemData: {
+        title: ""
+      },
       showCompleted: false,
       showEditModal: false,
       showShareModal: false,
@@ -507,7 +550,7 @@ export default {
     },
 
     async addItem() {
-      if (!this.newItem.title.trim()) return;
+      if (!this.newItem.title?.trim()) return;
 
       this.addingItem = true;
       this.error = null;
@@ -517,7 +560,7 @@ export default {
       // Check if an item with this title already exists (case-insensitive)
       // Exclude items that are being deleted or are optimistic items
       const existingItem = this.items.find(item => 
-        item.title.toLowerCase() === trimmedTitle.toLowerCase() &&
+        item.title?.toLowerCase() === trimmedTitle.toLowerCase() &&
         !item.deleting &&
         !item.isOptimistic &&
         !String(item.id).startsWith('temp-')
@@ -528,22 +571,26 @@ export default {
           // If the item exists and is completed, bring it back to "to do"
           try {
             await this.toggleComplete(existingItem);
+            // Reset editing state after successful toggle
+            this.editingItem = null;
+            this.newItem = {
+              title: "",
+              sort_order: 0,
+            };
+            this.hideAutocomplete();
           } catch (error) {
             console.error("Failed to toggle existing item:", error);
             this.error = error.message;
-            this.addingItem = false;
-            return;
           }
+        } else {
+          // Item already exists and is not completed, just reset the form
+          this.editingItem = null;
+          this.newItem = {
+            title: "",
+            sort_order: 0,
+          };
+          this.hideAutocomplete();
         }
-        // If the item exists and is not completed, just reset the form
-        // (no need to create a duplicate)
-        
-        // Reset form
-        this.newItem = {
-          title: "",
-          sort_order: 0,
-        };
-        this.hideAutocomplete();
         this.addingItem = false;
         return;
       }
@@ -565,7 +612,8 @@ export default {
         this.items.unshift(optimisticItem);
         console.log('➕ Added optimistic item:', optimisticItem);
 
-        // Reset form immediately for better UX
+        // Reset form and editing state immediately for better UX
+        this.editingItem = null;
         this.newItem = {
           title: "",
           sort_order: 0,
@@ -592,7 +640,8 @@ export default {
         this.items = this.items.filter(item => item.id !== optimisticItem.id);
         console.log('🗑️ Removed failed optimistic item');
         
-        // Restore form data on error
+        // Restore form data on error and re-enter editing mode
+        this.editingItem = 'new';
         this.newItem.title = trimmedTitle;
       } finally {
         this.addingItem = false;
@@ -659,14 +708,67 @@ export default {
       };
 
       this.$nextTick(() => {
-        if (this.$refs.editInput) {
-          this.$refs.editInput.focus();
+        // Fix focus error by checking if ref exists and has focus method
+        const editInput = this.$refs.editInput;
+        if (editInput && typeof editInput.focus === 'function') {
+          editInput.focus();
+          if (typeof editInput.select === 'function') {
+            editInput.select();
+          }
+        } else if (editInput && editInput.length > 0 && typeof editInput[0].focus === 'function') {
+          // Handle case where ref returns an array
+          editInput[0].focus();
+          if (typeof editInput[0].select === 'function') {
+            editInput[0].select();
+          }
         }
       });
     },
 
+    startAddNew() {
+      this.editingItem = 'new';
+      this.newItem = {
+        title: "",
+        sort_order: 0,
+      };
+
+      this.$nextTick(() => {
+        // Fix focus error by checking if ref exists and has focus method
+        const addInput = this.$refs.addInput;
+        if (addInput && typeof addInput.focus === 'function') {
+          addInput.focus();
+        } else if (addInput && addInput.length > 0 && typeof addInput[0].focus === 'function') {
+          // Handle case where ref returns an array
+          addInput[0].focus();
+        }
+      });
+    },
+
+    cancelAdd() {
+      this.editingItem = null;
+      this.newItem = {
+        title: "",
+        sort_order: 0,
+      };
+      this.hideAutocomplete();
+    },
+
+    handleAddBlur() {
+      // Small delay to allow autocomplete selection
+      setTimeout(() => {
+        if (this.newItem.title?.trim()) {
+          this.addItem();
+        } else {
+          this.cancelAdd();
+        }
+      }, 150);
+    },
+
     async saveEdit() {
-      if (!this.editingItemData.title.trim()) return;
+      if (!this.editingItemData.title?.trim()) {
+        this.cancelEdit();
+        return;
+      }
 
       const trimmedTitle = this.editingItemData.title.trim();
       const itemIndex = this.items.findIndex((i) => i.id === this.editingItem);
@@ -709,7 +811,9 @@ export default {
 
     cancelEdit() {
       this.editingItem = null;
-      this.editingItemData = {};
+      this.editingItemData = {
+        title: ""
+      };
     },
 
     async deleteItem(item) {
@@ -802,7 +906,7 @@ export default {
     },
 
     async handleAutocomplete() {
-      const query = this.newItem.title.trim().toLowerCase();
+      const query = this.newItem.title?.trim()?.toLowerCase() || '';
 
       // Show results for single character searches
       if (query.length < 1) {
@@ -818,7 +922,9 @@ export default {
       // Check cache first for immediate results
       const cacheKey = query;
       if (this.autocompleteCache.has(cacheKey)) {
-        this.autocompleteResults = this.autocompleteCache.get(cacheKey);
+        const cachedResults = this.autocompleteCache.get(cacheKey);
+        // Sort cached results by usage count (most popular first)
+        this.autocompleteResults = [...cachedResults].sort((a, b) => b.usage_count - a.usage_count);
         this.autocompleteLoading = false;
         this.showAutocomplete = true;
         return;
@@ -833,7 +939,8 @@ export default {
               item.item_title.toLowerCase().includes(query)
             );
             if (filteredResults.length > 0) {
-              this.autocompleteResults = filteredResults;
+              // Sort filtered results by usage count (most popular first)
+              this.autocompleteResults = filteredResults.sort((a, b) => b.usage_count - a.usage_count);
               this.autocompleteLoading = false;
               this.showAutocomplete = true;
               break;
@@ -852,19 +959,22 @@ export default {
 
       this.autocompleteTimeout = setTimeout(async () => {
         try {
-          // Use a more responsive timeout for better UX
-          const results = await listService.autocompleteItems(query);
+          // Use a more responsive timeout for better UX and request more results
+          const results = await listService.autocompleteItems(query, 30);
           
-          // Cache the results
-          this.autocompleteCache.set(cacheKey, results);
+          // Sort results by usage count (most popular first)
+          const sortedResults = [...results].sort((a, b) => b.usage_count - a.usage_count);
+          
+          // Cache the sorted results
+          this.autocompleteCache.set(cacheKey, sortedResults);
           
           // Only update if this is still the current query
-          if (this.newItem.title.trim().toLowerCase() === query) {
-            this.autocompleteResults = results;
+          if (this.newItem.title?.trim()?.toLowerCase() === query) {
+            this.autocompleteResults = sortedResults;
             this.autocompleteLoading = false;
             
             // Keep autocomplete visible if we have results
-            if (results.length > 0) {
+            if (sortedResults.length > 0) {
               this.showAutocomplete = true;
             }
           }
@@ -934,6 +1044,44 @@ export default {
       const regex = new RegExp(`(${query})`, 'gi');
       return text.replace(regex, '<span class="highlight">$1</span>');
     },
+
+    deleteSuggestion(suggestion) {
+      if (!confirm(`Delete "${suggestion.item_title}" from suggestions?`)) {
+        return;
+      }
+
+      // Remove from current results immediately for better UX
+      this.autocompleteResults = this.autocompleteResults.filter(
+        item => item.item_title !== suggestion.item_title
+      );
+
+      // Clear from cache
+      this.autocompleteCache.forEach((cachedResults, key) => {
+        const filteredResults = cachedResults.filter(
+          item => item.item_title !== suggestion.item_title
+        );
+        this.autocompleteCache.set(key, filteredResults);
+      });
+
+      // Call backend to delete the usage stat
+      this.deleteUsageStat(suggestion.item_title).catch(error => {
+        console.error("Failed to delete suggestion:", error);
+        this.error = "Failed to delete suggestion. Please refresh and try again.";
+        
+        // Reload autocomplete to restore consistency
+        if (this.newItem.title.trim()) {
+          this.handleAutocomplete();
+        }
+      });
+    },
+
+    async deleteUsageStat(itemTitle) {
+      try {
+        await listService.deleteUsageStat(itemTitle);
+      } catch (error) {
+        throw new Error(error.message || 'Failed to delete usage stat');
+      }
+    },
   },
 };
 </script>
@@ -982,5 +1130,152 @@ export default {
 
 .item-card.optimistic .item-info {
   cursor: default;
+}
+
+/* Add new item styles */
+.add-new-item {
+  opacity: 0.6;
+  border: 2px dashed #ddd !important;
+  background: #fafafa;
+  transition: all 0.2s ease;
+}
+
+.add-new-item:hover {
+  opacity: 0.8;
+  border-color: #007AFF !important;
+  background: #f5f9ff;
+}
+
+.add-new-item.editing {
+  opacity: 1;
+  border: 2px solid #007AFF !important;
+  background: white;
+}
+
+.add-new-checkbox .checkbox.empty {
+  border: 2px dashed #ccc;
+  background: transparent;
+  color: transparent;
+}
+
+.add-new-item:hover .add-new-checkbox .checkbox.empty {
+  border-color: #007AFF;
+}
+
+.add-new-item.editing .add-new-checkbox .checkbox.empty {
+  border: 2px solid #007AFF;
+}
+
+.add-new-title {
+  color: #999;
+  font-style: italic;
+  font-weight: normal;
+}
+
+.add-new-info {
+  cursor: pointer;
+}
+
+/* Inline edit input */
+.inline-edit-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+}
+
+.inline-edit-input::placeholder {
+  color: #999;
+  font-style: italic;
+  font-weight: normal;
+}
+
+.inline-edit-input:focus {
+  background: rgba(0, 122, 255, 0.05);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+
+/* Autocomplete positioning for inline input */
+.item-info {
+  position: relative;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover {
+  background-color: #f8f9fa;
+}
+
+.suggestion-content {
+  flex: 1;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.suggestion-title {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.suggestion-meta {
+  font-size: 12px;
+  color: #666;
+}
+
+.delete-suggestion-btn {
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  margin-right: 8px;
+}
+
+.delete-suggestion-btn:hover {
+  background-color: #fee;
+  color: #e74c3c;
+}
+
+.autocomplete-loading {
+  padding: 12px;
+  text-align: center;
+  color: #666;
+  font-size: 14px;
 }
 </style> 
