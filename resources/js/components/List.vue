@@ -37,7 +37,7 @@
           <div v-if="showAutocomplete && (autocompleteResults.length > 0 || autocompleteLoading)" class="autocomplete-dropdown">
             <div v-if="autocompleteLoading" class="autocomplete-loading">Searching...</div>
             <div v-for="suggestion in autocompleteResults" :key="suggestion.item_title" @mousedown.prevent="selectSuggestion(suggestion)" class="autocomplete-item">
-              <div class="suggestion-title" v-html="highlightMatch(suggestion.item_title, newItem.title)"></div>
+              <div class="suggestion-title" v-html="suggestion.item_title"></div>
               <div class="suggestion-meta">Used {{ suggestion.usage_count }} times • {{ Math.round(suggestion.completion_rate) }}% completion rate</div>
             </div>
           </div>
