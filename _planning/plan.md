@@ -105,8 +105,8 @@ npm run dev
 #### Environment Variables
 ```env
 # Pusher Configuration (already set)
-PUSHER_APP_KEY=64d76c35e1d072ebec0d
-PUSHER_APP_SECRET=f1ec64e77e1b518000b1
+PUSHER_APP_KEY=KEY
+PUSHER_APP_SECRET=SECRET
 PUSHER_APP_ID=1997456
 PUSHER_APP_CLUSTER="eu"
 
