@@ -298,17 +298,33 @@ class ListItemController extends Controller
         $user = Auth::user();
         $query = $request->get('q', '');
 
-        if (strlen($query) < 2) {
+        // Reduce minimum query length for more reactive autocomplete
+        if (strlen($query) < 1) {
             return response()->json([
                 'success' => true,
                 'data' => [],
             ]);
         }
 
+        $escapedQuery = addslashes($query);
+        
+        // Improved search with better partial matching
+        // Priority: 1. Starts with query, 2. Contains query at word boundary, 3. Contains query anywhere
         $suggestions = ItemUsageStat::where('user_id', $user->id)
-            ->where('item_title', 'LIKE', "%{$query}%")
-            ->orderBy('usage_count', 'desc')
-            ->orderBy('completion_rate', 'desc')
+            ->where(function ($q) use ($escapedQuery) {
+                $q->where('item_title', 'LIKE', "{$escapedQuery}%")      // Starts with query (highest priority)
+                  ->orWhere('item_title', 'LIKE', "% {$escapedQuery}%")   // Word boundary match
+                  ->orWhere('item_title', 'LIKE', "%{$escapedQuery}%");   // Contains anywhere
+            })
+            ->orderByRaw("
+                CASE 
+                    WHEN item_title LIKE '{$escapedQuery}%' THEN 1
+                    WHEN item_title LIKE '% {$escapedQuery}%' THEN 2
+                    ELSE 3
+                END,
+                usage_count DESC,
+                completion_rate DESC
+            ")
             ->limit(10)
             ->get(['item_title', 'usage_count', 'completion_rate']);
 

@@ -50,9 +50,10 @@
           </div>
 
           <!-- Autocomplete dropdown -->
-          <div v-if="showAutocomplete && autocompleteResults.length > 0" class="autocomplete-dropdown">
+          <div v-if="showAutocomplete && (autocompleteResults.length > 0 || autocompleteLoading)" class="autocomplete-dropdown">
+            <div v-if="autocompleteLoading" class="autocomplete-loading">Searching...</div>
             <div v-for="suggestion in autocompleteResults" :key="suggestion.item_title" @mousedown.prevent="selectSuggestion(suggestion)" class="autocomplete-item">
-              <div class="suggestion-title">{{ suggestion.item_title }}</div>
+              <div class="suggestion-title" v-html="highlightMatch(suggestion.item_title, newItem.title)"></div>
               <div class="suggestion-meta">Used {{ suggestion.usage_count }} times • {{ Math.round(suggestion.completion_rate) }}% completion rate</div>
             </div>
           </div>
@@ -203,6 +204,8 @@ export default {
       showShareModal: false,
       showAutocomplete: false,
       autocompleteResults: [],
+      autocompleteLoading: false,
+      autocompleteCache: new Map(), // Cache for autocomplete results
       autocompleteTimeout: null,
       newItem: {
         title: "",
@@ -437,8 +440,33 @@ export default {
       this.error = null;
 
       try {
+        const trimmedTitle = this.newItem.title.trim();
+        
+        // Check if an item with this title already exists (case-insensitive)
+        const existingItem = this.items.find(item => 
+          item.title.toLowerCase() === trimmedTitle.toLowerCase()
+        );
+
+        if (existingItem) {
+          if (existingItem.is_completed) {
+            // If the item exists and is completed, bring it back to "to do"
+            await this.toggleComplete(existingItem);
+          }
+          // If the item exists and is not completed, just reset the form
+          // (no need to create a duplicate)
+          
+          // Reset form
+          this.newItem = {
+            title: "",
+            sort_order: 0,
+          };
+          this.hideAutocomplete();
+          return;
+        }
+
+        // If no existing item found, create new one
         const itemData = {
-          title: this.newItem.title.trim(),
+          title: trimmedTitle,
           sort_order: this.newItem.sort_order,
         };
 
@@ -571,26 +599,78 @@ export default {
     },
 
     async handleAutocomplete() {
-      const query = this.newItem.title.trim();
+      const query = this.newItem.title.trim().toLowerCase();
 
-      if (query.length < 2) {
+      // Show results for single character searches
+      if (query.length < 1) {
         this.autocompleteResults = [];
+        this.autocompleteLoading = false;
+        this.showAutocomplete = false;
         return;
       }
 
-      // Debounce the autocomplete request
+      // Always show autocomplete when typing
+      this.showAutocomplete = true;
+
+      // Check cache first for immediate results
+      const cacheKey = query;
+      if (this.autocompleteCache.has(cacheKey)) {
+        this.autocompleteResults = this.autocompleteCache.get(cacheKey);
+        this.autocompleteLoading = false;
+        this.showAutocomplete = true;
+        return;
+      }
+
+      // For very short queries, also check if we have cached results for longer queries that start with this
+      if (query.length <= 2) {
+        for (const [cachedQuery, results] of this.autocompleteCache.entries()) {
+          if (cachedQuery.startsWith(query) && results.length > 0) {
+            // Filter the cached results to match current query
+            const filteredResults = results.filter(item => 
+              item.item_title.toLowerCase().includes(query)
+            );
+            if (filteredResults.length > 0) {
+              this.autocompleteResults = filteredResults;
+              this.autocompleteLoading = false;
+              this.showAutocomplete = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // Show loading state
+      this.autocompleteLoading = true;
+
+      // Debounce the autocomplete request with shorter timeout for better reactivity
       if (this.autocompleteTimeout) {
         clearTimeout(this.autocompleteTimeout);
       }
 
       this.autocompleteTimeout = setTimeout(async () => {
         try {
-          this.autocompleteResults = await listService.autocompleteItems(query);
+          // Use a more responsive timeout for better UX
+          const results = await listService.autocompleteItems(query);
+          
+          // Cache the results
+          this.autocompleteCache.set(cacheKey, results);
+          
+          // Only update if this is still the current query
+          if (this.newItem.title.trim().toLowerCase() === query) {
+            this.autocompleteResults = results;
+            this.autocompleteLoading = false;
+            
+            // Keep autocomplete visible if we have results
+            if (results.length > 0) {
+              this.showAutocomplete = true;
+            }
+          }
         } catch (error) {
           console.error("Autocomplete failed:", error);
           this.autocompleteResults = [];
+          this.autocompleteLoading = false;
         }
-      }, 300);
+      }, 100); // Reduced from 300ms to 100ms for much faster response
     },
 
     selectSuggestion(suggestion) {
@@ -603,6 +683,7 @@ export default {
       setTimeout(() => {
         this.showAutocomplete = false;
         this.autocompleteResults = [];
+        this.autocompleteLoading = false;
       }, 150); // Small delay to allow click events on suggestions
     },
 
@@ -644,6 +725,12 @@ export default {
 
       const diffInDays = Math.floor(diffInHours / 24);
       return `${diffInDays}d ago`;
+    },
+
+    highlightMatch(text, query) {
+      if (!query) return text;
+      const regex = new RegExp(`(${query})`, 'gi');
+      return text.replace(regex, '<span class="highlight">$1</span>');
     },
   },
 };

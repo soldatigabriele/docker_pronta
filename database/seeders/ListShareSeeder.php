@@ -98,5 +98,19 @@ class ListShareSeeder extends Seeder
                 'updated_at' => now(),
             ]);
         }
+
+        DB::table('list_shares')->insert([
+            'reusable_list_id' => 1,
+            'shared_by_user_id' => 1,
+            'shared_with_user_id' => 2,
+            'permission_level' => 'admin',
+            'is_accepted' => true,
+            'invited_at' => now()->subDays(3),
+            'accepted_at' => now(),
+            'expires_at' => now()->addDays(7), // Expires in 7 days
+            'can_share' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }
