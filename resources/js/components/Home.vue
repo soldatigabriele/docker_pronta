@@ -2,9 +2,8 @@
   <div class="home-wrapper">
     <div class="home-container">
       <!-- User Header -->
-      <div class="user-header">
+      <div class="user-header d-none">
         <div v-if="user" class="user-info">
-          <h1>{{ getGreeting() }}</h1>
           <p class="user-subtitle">{{ user.name }}</p>
         </div>
         <div v-else class="user-info">
@@ -18,22 +17,6 @@
           <button @click="handleLogout" :disabled="loggingOut" class="logout-btn">
             {{ loggingOut ? '...' : '⏻' }}
           </button>
-        </div>
-      </div>
-
-      <!-- Quick Stats -->
-      <div v-if="lists.length > 0" class="quick-stats">
-        <div class="stat-item">
-          <span class="stat-number">{{ totalLists }}</span>
-          <span class="stat-label">Lists</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-number">{{ totalPendingItems }}</span>
-          <span class="stat-label">Pending</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-number">{{ totalCompletedToday }}</span>
-          <span class="stat-label">Completed Today</span>
         </div>
       </div>
 
@@ -77,7 +60,6 @@
       <!-- Lists Section -->
       <div class="lists-section">
         <div class="section-header">
-          <h2>My Lists</h2>
           <button @click="showCreateList = true" class="add-list-btn">
             + New List
           </button>
@@ -664,13 +646,6 @@ export default {
       } finally {
         this.loggingOut = false
       }
-    },
-    
-    getGreeting() {
-      const hour = new Date().getHours()
-      if (hour < 12) return 'Good Morning'
-      if (hour < 17) return 'Good Afternoon'
-      return 'Good Evening'
     },
     
     getListIcon(iconName) {

@@ -880,7 +880,7 @@ body {
   display: grid;
   gap: var(--spacing-md);
   // grid of 2 columns
-  grid-template-columns: repeat(2, 1fr);
+  // grid-template-columns: repeat(2, 1fr);
 }
 
 .list-card {
