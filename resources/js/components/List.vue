@@ -25,22 +25,6 @@
         </div>
       </div>
 
-      <!-- Quick Stats -->
-      <div v-if="list && items.length > 0" class="quick-stats">
-        <div class="stat-item">
-          <span class="stat-number">{{ pendingItems.length }}</span>
-          <span class="stat-label">Pending</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-number">{{ completedItems.length }}</span>
-          <span class="stat-label">Completed</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-number">{{ Math.round(completionRate) }}%</span>
-          <span class="stat-label">Done</span>
-        </div>
-      </div>
-
       <!-- Add Item Form -->
       <div v-if="canEdit" class="add-item-section">
         <form @submit.prevent="addItem" class="add-item-form">
@@ -78,20 +62,20 @@
         <div v-if="pendingItems.length > 0" class="items-group">
           <h3 class="group-title">To Do</h3>
           <div class="items-list">
-            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting }">
+            <div v-for="item in sortedPendingItems" :key="item.id" class="item-card" :class="{ 'editing': editingItem === item.id, 'deleting': item.deleting, 'optimistic': item.isOptimistic }">
               <div v-if="editingItem !== item.id" class="item-content">
-                <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating">
+                <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating || item.deleting || item.isOptimistic">
                   <div class="checkbox">{{ item.updating ? '⟳' : (item.is_completed ? '✓' : '') }}</div>
                 </button>
 
-                <div class="item-info" @click="startEdit(item)">
+                <div class="item-info" @click="!item.deleting && !item.isOptimistic ? startEdit(item) : null">
                   <h4 class="item-title">{{ item.title }}</h4>
                   <div v-if="item.usage_count > 1" class="item-meta">Used {{ item.usage_count }} times</div>
+                  <div v-if="item.isOptimistic" class="item-meta optimistic-indicator">Processing...</div>
                 </div>
 
                 <div class="item-actions">
-                  <button v-if="canEdit" @click="startEdit(item)" class="edit-item-btn">✏️</button>
-                  <button v-if="canEdit" @click="deleteItem(item)" class="delete-item-btn">🗑️</button>
+                  <button v-if="canEdit" @click="deleteItem(item)" :disabled="item.deleting || item.isOptimistic" class="delete-item-btn">🗑️</button>
                 </div>
               </div>
 
@@ -117,23 +101,26 @@
           </button>
 
           <div v-show="showCompleted" class="items-list">
-            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting }">
+            <div v-for="item in sortedCompletedItems" :key="item.id" class="item-card completed" :class="{ 'deleting': item.deleting, 'optimistic': item.isOptimistic }">
               <div class="item-content">
-                <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating">
+                <button @click="toggleComplete(item)" class="complete-btn" :disabled="item.updating || item.deleting || item.isOptimistic">
                   <div class="checkbox completed">{{ item.updating ? '⟳' : '✓' }}</div>
                 </button>
 
                 <div class="item-info">
                   <h4 class="item-title">{{ item.title }}</h4>
                   <div class="completion-info">
-                    Completed {{ formatTimeAgo(item.completed_at) }}
-                    <span v-if="item.completed_by?.name">by {{ item.completed_by.name }}</span>
-                    <span v-if="item.usage_count > 1">• Used {{ item.usage_count }} times</span>
+                    <span v-if="!item.isOptimistic">
+                      Completed {{ formatTimeAgo(item.completed_at) }}
+                      <span v-if="item.completed_by?.name">by {{ item.completed_by.name }}</span>
+                      <span v-if="item.usage_count > 1">• Used {{ item.usage_count }} times</span>
+                    </span>
+                    <span v-else class="optimistic-indicator">Processing...</span>
                   </div>
                 </div>
 
                 <div class="item-actions">
-                  <button v-if="canEdit" @click="deleteItem(item)" class="delete-item-btn">🗑️</button>
+                  <button v-if="canEdit" @click="deleteItem(item)" :disabled="item.deleting || item.isOptimistic" class="delete-item-btn">🗑️</button>
                 </div>
               </div>
             </div>
@@ -528,14 +515,25 @@ export default {
       const trimmedTitle = this.newItem.title.trim();
       
       // Check if an item with this title already exists (case-insensitive)
+      // Exclude items that are being deleted or are optimistic items
       const existingItem = this.items.find(item => 
-        item.title.toLowerCase() === trimmedTitle.toLowerCase()
+        item.title.toLowerCase() === trimmedTitle.toLowerCase() &&
+        !item.deleting &&
+        !item.isOptimistic &&
+        !String(item.id).startsWith('temp-')
       );
 
       if (existingItem) {
         if (existingItem.is_completed) {
           // If the item exists and is completed, bring it back to "to do"
-          await this.toggleComplete(existingItem);
+          try {
+            await this.toggleComplete(existingItem);
+          } catch (error) {
+            console.error("Failed to toggle existing item:", error);
+            this.error = error.message;
+            this.addingItem = false;
+            return;
+          }
         }
         // If the item exists and is not completed, just reset the form
         // (no need to create a duplicate)
@@ -603,6 +601,21 @@ export default {
 
     async toggleComplete(item) {
       console.log("toggleComplete called for item:", item.id, item.title);
+      
+      // Don't allow toggling for optimistic items or items with temporary IDs
+      if (item.isOptimistic || String(item.id).startsWith('temp-')) {
+        console.warn("Cannot toggle completion for optimistic item:", item);
+        this.error = "Cannot complete item while it's being processed. Please wait a moment.";
+        return;
+      }
+      
+      // Don't allow toggling for items being deleted
+      if (item.deleting) {
+        console.warn("Cannot toggle completion for item being deleted:", item);
+        this.error = "Cannot complete item while it's being deleted.";
+        return;
+      }
+      
       // Optimistic update
       item.updating = true;
 
@@ -634,6 +647,12 @@ export default {
     },
 
     startEdit(item) {
+      // Don't allow editing optimistic items, items being deleted, or items with temporary IDs
+      if (item.isOptimistic || item.deleting || String(item.id).startsWith('temp-')) {
+        console.warn("Cannot edit item in current state:", item);
+        return;
+      }
+
       this.editingItem = item.id;
       this.editingItemData = {
         title: item.title,
@@ -694,6 +713,19 @@ export default {
     },
 
     async deleteItem(item) {
+      // Don't allow deleting optimistic items or items with temporary IDs
+      if (item.isOptimistic || String(item.id).startsWith('temp-')) {
+        console.warn("Cannot delete optimistic item:", item);
+        this.error = "Cannot delete item while it's being processed. Please wait a moment.";
+        return;
+      }
+
+      // Don't allow deleting items that are already being deleted
+      if (item.deleting) {
+        console.warn("Item is already being deleted:", item);
+        return;
+      }
+
       if (!confirm(`Delete "${item.title}"?`)) return;
 
       console.log('🗑️ Starting deletion for item:', item.id, item.title);
@@ -925,5 +957,30 @@ export default {
 
 .item-card.deleting .item-actions {
   opacity: 0.3;
+}
+
+.item-card.optimistic {
+  opacity: 0.7;
+  position: relative;
+}
+
+.item-card.optimistic .item-title {
+  font-style: italic;
+}
+
+.optimistic-indicator {
+  color: #666;
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.item-card.optimistic .complete-btn,
+.item-card.optimistic .delete-item-btn {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.item-card.optimistic .item-info {
+  cursor: default;
 }
 </style> 
