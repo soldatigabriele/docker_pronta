@@ -18,7 +18,7 @@ export default defineConfig({
                 cleanupOutdatedCaches: true,
                 skipWaiting: true
             },
-            includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+            includeAssets: ['favicon.png', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
             manifest: {
                 name: 'Pronta - Todo List',
                 short_name: 'Pronta',
@@ -31,19 +31,19 @@ export default defineConfig({
                 start_url: '/',
                 icons: [
                     {
-                        src: 'pwa-192x192.png',
+                        src: '/pwa-192x192.png',
                         sizes: '192x192',
                         type: 'image/png',
                         purpose: 'any'
                     },
                     {
-                        src: 'pwa-512x512.png',
+                        src: '/pwa-512x512.png',
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'any'
                     },
                     {
-                        src: 'pwa-512x512.png',
+                        src: '/pwa-512x512.png',
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'maskable'
@@ -51,7 +51,8 @@ export default defineConfig({
                 ]
             },
             devOptions: {
-                enabled: true
+                enabled: true,
+                type: 'module'
             }
         })
     ],

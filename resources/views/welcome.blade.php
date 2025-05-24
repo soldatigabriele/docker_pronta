@@ -26,7 +26,7 @@
         <link rel="mask-icon" href="/mask-icon.svg" color="#0d6efd">
         
         <!-- PWA Manifest -->
-        <link rel="manifest" href="/build/manifest.json">
+        <link rel="manifest" href="/build/manifest.webmanifest">
 
         @vite(['resources/js/app.js'])
 
