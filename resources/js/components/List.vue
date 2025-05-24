@@ -675,8 +675,7 @@ export default {
 
     selectSuggestion(suggestion) {
       this.newItem.title = suggestion.item_title;
-      this.hideAutocomplete();
-      this.$refs.itemInput.focus();
+      this.addItem();
     },
 
     hideAutocomplete() {
