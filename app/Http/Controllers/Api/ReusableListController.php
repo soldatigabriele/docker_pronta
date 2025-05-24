@@ -38,9 +38,29 @@ class ReusableListController extends Controller
 
         $lists = $query->get();
 
+        // Add permission levels for each list
+        $listsData = $lists->map(function ($list) use ($user) {
+            $listData = $list->toArray();
+            
+            if ($list->user_id === $user->id) {
+                // User owns the list
+                $listData['permission_level'] = 'owner';
+            } else {
+                // User is accessing via share - get their permission level
+                $share = $list->shares()
+                    ->where('shared_with_user_id', $user->id)
+                    ->where('is_accepted', true)
+                    ->first();
+                
+                $listData['permission_level'] = $share ? $share->permission_level : null;
+            }
+            
+            return $listData;
+        });
+
         return response()->json([
             'success' => true,
-            'data' => $lists,
+            'data' => $listsData,
         ]);
     }
 
@@ -94,9 +114,25 @@ class ReusableListController extends Controller
             'sharedWith.sharedWith:id,name,email'
         ]);
 
+        // Add current user's permission level for shared lists
+        $listData = $reusableList->toArray();
+        
+        if ($reusableList->user_id === $user->id) {
+            // User owns the list
+            $listData['permission_level'] = 'owner';
+        } else {
+            // User is accessing via share - get their permission level
+            $share = $reusableList->shares()
+                ->where('shared_with_user_id', $user->id)
+                ->where('is_accepted', true)
+                ->first();
+            
+            $listData['permission_level'] = $share ? $share->permission_level : null;
+        }
+
         return response()->json([
             'success' => true,
-            'data' => $reusableList,
+            'data' => $listData,
         ]);
     }
 

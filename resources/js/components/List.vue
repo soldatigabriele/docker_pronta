@@ -257,6 +257,7 @@ export default {
       return (
         this.list &&
         (this.list.user_id === user?.id ||
+          this.list.permission_level === "owner" ||
           this.list.permission_level === "edit" ||
           this.list.permission_level === "admin")
       );
@@ -268,6 +269,7 @@ export default {
       return (
         this.list &&
         (this.list.user_id === user?.id ||
+          this.list.permission_level === "owner" ||
           this.list.permission_level === "admin")
       );
     },
@@ -291,6 +293,13 @@ export default {
       try {
         this.list = await listService.getList(this.listId);
         this.editListData = { ...this.list };
+        
+        // Debug: Log the list data and permission level
+        console.log('Loaded list:', this.list);
+        console.log('Permission level:', this.list.permission_level);
+        console.log('User ID:', authService.getUser()?.id);
+        console.log('List owner ID:', this.list.user_id);
+        console.log('Can edit:', this.canEdit);
       } catch (error) {
         console.error("Failed to load list:", error);
         this.error = error.message;
