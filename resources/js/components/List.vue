@@ -721,7 +721,7 @@ export default {
               this.cancelEdit();
             }
           }
-        }, 3000); // 3 second fallback
+        }, 100); // 3 second fallback
         
         // Store the timeout ID on the item so we can clear it if the real-time event arrives
         if (itemIndex !== -1) {
